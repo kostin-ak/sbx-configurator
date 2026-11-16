@@ -42,6 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,tui]"
       - name: TUI tests
+        if: ${{ hashFiles('tests/test_tui.py') != '' }}
         run: python -m unittest discover -s tests -p "test_tui.py" -v
 
   compile:
