@@ -11,6 +11,14 @@ transforms:
 - action: rename
   pattern: ([🇦-🇿]{2})
   replacement: '\1 [EX] '
+# Naming is optional. Without this block the tags stay as `transforms` left them.
+# Template mode:  🇩🇪DE Example gRPC-R 03
+# Regex mode:     mode: regex, pattern/replacement
+# Keep the provider's own number:
+#   template: "{flag}{cc} {provider} {transport} {num}"
+#   fallback_template: "{flag}{cc} {provider} {transport} {index:02d}"
+#   fields: {num: 'V(\d+)'}
+# See docs/NAMING.md.
 naming:
   enabled: true
 selectors:

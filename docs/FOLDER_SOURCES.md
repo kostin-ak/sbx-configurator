@@ -83,8 +83,8 @@ country: DE
 provider: AWG
 ```
 
-With `country` the node gets the usual `🇩🇪DE AWG AWG 4821` name and is picked up
-by the shared selectors.
+With `country` the node gets a flag and can be renamed by the subscription
+`naming` template (see [NAMING.md](NAMING.md)).
 
 ## WireGuard / AmneziaWG
 

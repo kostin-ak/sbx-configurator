@@ -46,8 +46,27 @@ selectors:
 - `fetch.url` или `fetch.file` — источник;
 - `fetch.cache.enabled` — запись/использование кэша;
 - `transforms` — последовательные правила над узлами;
+- `naming` — необязательные имена узлов (шаблон или regex), см.
+  [NAMING.md](NAMING.md);
 - `selectors.global` — подключать общие шаблоны;
 - `selectors.local` — локальные selectors.
+
+## Имена узлов
+
+Именование выключено, пока в подписке нет `naming.enabled: true`. Без него
+тег остаётся таким, каким его сделали `transforms` — то есть работает
+привычное переименование регулярками.
+
+```yaml
+naming:
+  enabled: true
+  template: "{flag}{cc} {provider}{marker} {transport}{reality} {index:02d}"
+```
+
+`🇩🇪DE Provider gRPC-R 03`. Есть `mode: regex` для чистого
+`pattern`/`replacement`, поля из регулярных групп (`fields`) и
+`fallback_template` для узлов без номера. Полное описание, все поля и
+примеры — в [NAMING.md](NAMING.md).
 
 ## Selector templates
 

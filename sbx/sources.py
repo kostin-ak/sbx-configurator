@@ -146,9 +146,8 @@ class SubscriptionProcessor:
             nodes.append(processed)
 
         naming = subscription.get("naming") or {}
-        if naming.get("enabled", False):
-            apply_naming(nodes, name)
-            apply_naming(folder_endpoints, name)
+        apply_naming(nodes, name, naming)
+        apply_naming(folder_endpoints, name, naming)
         tls_defaults = subscription.get("tls") or {}
         if tls_defaults.get("insecure"):
             for node in nodes:

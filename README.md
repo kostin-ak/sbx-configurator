@@ -113,9 +113,8 @@ docs/                architecture, configuration, deployment, testing
   `parser: wireguard-conf | share-links`.
 - **Transforms** — `rename`, `exclude`, `patch`, `random_patch` applied per
   subscription before assembly.
-- **Naming** — `naming.enabled` produces stable, sortable tags; nodes tagged
-  `WL`/`Whitelist`/`Обход` keep a ` WL ` marker and stay out of the main proxy
-  group.
+- **Naming** — optional and off by default: template mode with regex fields,
+  or a plain regex rename. See [docs/NAMING.md](docs/NAMING.md).
 - **Routing** — devices, groups, categories and per-device policies under
   `config/routing/`.
 - **Selectors** — templates in `config/selectors.yaml`, plus per-subscription
