@@ -4,21 +4,29 @@ import unittest
 import json
 from pathlib import Path
 
-from ruamel.yaml import YAML
-
-from sbx.tui.profiles import Profile
-from sbx.tui.store import ConfigStore, StoreError
-from sbx.tui import routing as routing_helpers
-from sbx.tui import transforms as transform_helpers
-from sbx.tui import services
-
 ROOT = Path(__file__).resolve().parents[1]
 
 HAS_TUI = True
 try:
     import textual  # noqa: F401
+    from ruamel.yaml import YAML
+
+    from sbx.tui.profiles import Profile
+    from sbx.tui.store import ConfigStore, StoreError
+    from sbx.tui import routing as routing_helpers
+    from sbx.tui import transforms as transform_helpers
+    from sbx.tui import services
 except Exception:  # noqa: BLE001
     HAS_TUI = False
+    YAML = None
+    Profile = None
+    ConfigStore = None
+    StoreError = Exception
+    routing_helpers = None
+    transform_helpers = None
+    services = None
+
+TUI_REQUIRED = unittest.skipUnless(HAS_TUI, "TUI dependencies are not installed (pip install .[tui])")
 
 
 def make_profile(tmp: Path) -> Profile:
@@ -40,6 +48,7 @@ def seed_snapshot(profile: Profile) -> None:
     shutil.copy2(ROOT / "examples/snapshot/etc/sing-box/configs/example_links.txt", target / "example_links.txt")
 
 
+@TUI_REQUIRED
 class StoreTests(unittest.TestCase):
     def test_round_trip_preserves_comments(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -101,6 +110,7 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(entries["subscriptions.demo.url"], "https://example.com")
 
 
+@TUI_REQUIRED
 class RoutingHelperTests(unittest.TestCase):
     def test_devices_groups_policies_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -128,6 +138,7 @@ class RoutingHelperTests(unittest.TestCase):
                 routing_helpers.upsert_policy(store, "Laptop", ["no-such-category"])
 
 
+@TUI_REQUIRED
 class TransformHelperTests(unittest.TestCase):
     def test_transforms_are_editable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -152,6 +163,7 @@ class TransformHelperTests(unittest.TestCase):
             transform_helpers.parse_params("- 1")
 
 
+@TUI_REQUIRED
 class ServicesTests(unittest.TestCase):
     def test_preview_names_applies_transforms_and_naming(self):
         with tempfile.TemporaryDirectory() as tmp:
