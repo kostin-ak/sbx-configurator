@@ -40,6 +40,16 @@ bin/sing-box-extended check -c config/protocol-check.json -D state/protocol-chec
 The second file exercises every native protocol supported by the fork; it uses
 dummy endpoints and never connects anywhere.
 
+## Configuration lint
+
+```bash
+python -m sbx.cli lint
+```
+
+Checks cross-references the schema cannot see: category rule-sets, policy
+categories and aliases, group members, duplicate device addresses, selector and
+transform regexes. Exit code 1 means there is at least one error.
+
 ## Proxy-only runtime
 
 ```bash

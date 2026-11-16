@@ -72,10 +72,15 @@ selectors:
 ```bash
 .venv/bin/python -m sbx.cli build --check
 .venv/bin/python -m sbx.cli check --config build/artifacts/config.json
+.venv/bin/python -m sbx.cli lint
 ```
 
 `--check` runs the structural validator and `sing-box check`. A build that fails
 these steps never replaces the previous artifact.
+
+`lint` проверяет перекрёстные ссылки: категории → rule-sets, политики →
+категории/устройства, участники групп, дубли адресов и регулярки в селекторах
+и transforms.
 
 ## Try it without the router TUN
 
