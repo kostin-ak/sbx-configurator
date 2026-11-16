@@ -277,15 +277,15 @@ class AppSmokeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.title, "sbx · default")
 
     async def test_tabs_modals_and_yaml_editor(self):
-        from textual.widgets import TabbedContent, TextArea
+        from textual.widgets import DataTable, TabbedContent, TextArea
 
         from sbx.tui.app import SbxTui
-        from sbx.tui.screens import SubscriptionModal
+        from sbx.tui.screens import SubscriptionModal, VisualPane
 
         app = SbxTui("default", ROOT)
         async with app.run_test() as pilot:
             await pilot.pause()
-            for tab in ("sources", "routing", "rules", "selectors", "protocols", "secrets", "yaml", "build", "logs", "deploy"):
+            for tab in ("sources", "routing", "rules", "selectors", "protocols", "secrets", "yaml", "visual", "build", "logs", "deploy"):
                 app.action_open_tab(tab)
                 await pilot.pause()
 
@@ -293,6 +293,10 @@ class AppSmokeTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             editor = app.query_one(TextArea)
             self.assertIn("templates", editor.text)
+
+            app.query_one(VisualPane).load_file(ROOT / "config/selectors.yaml")
+            await pilot.pause()
+            self.assertGreater(app.query_one("#visual-table", DataTable).row_count, 0)
 
             app.push_screen(SubscriptionModal(app.store))
             await pilot.pause()

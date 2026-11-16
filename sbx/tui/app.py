@@ -25,6 +25,7 @@ from .screens import (
     SecretsPane,
     SelectorsPane,
     SourcesPane,
+    VisualPane,
     YamlPane,
 )
 from .store import ConfigStore
@@ -80,6 +81,8 @@ class SbxTui(App):
                 yield SecretsPane()
             with TabPane("YAML", id="yaml"):
                 yield YamlPane()
+            with TabPane("Visual", id="visual"):
+                yield VisualPane()
             with TabPane("Build", id="build"):
                 yield BuildPane()
             with TabPane("Logs & Probe", id="logs"):
@@ -122,6 +125,10 @@ class SbxTui(App):
         except Exception:
             pass
         try:
+            self.query_one(VisualPane).refresh_files()
+        except Exception:
+            pass
+        try:
             self.query_one(DashboardPane).refresh_profile_select()
         except Exception:
             pass
@@ -150,6 +157,35 @@ class SbxTui(App):
             self.query_one(YamlPane).load_file(path)
         except Exception as error:  # noqa: BLE001
             self.notify(str(error), severity="error")
+
+    def open_in_editor(self, path) -> None:
+        """Suspend the TUI and open the file in $EDITOR (vim by default)."""
+
+        import os
+        import shutil
+        import subprocess
+
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vim"
+        command = shutil.which(editor)
+        if not command:
+            self.notify(f"editor not found: {editor}", severity="error", timeout=10)
+            return
+        try:
+            with self.suspend():
+                subprocess.call([command, str(path)])
+        except Exception as error:  # noqa: BLE001
+            self.notify(f"editor failed: {error}", severity="error", timeout=10)
+            return
+        self.store.reload()
+        try:
+            self.store.validate()
+        except Exception as error:  # noqa: BLE001
+            self.notify(f"validation: {error}", severity="error", timeout=12)
+        try:
+            self.query_one(YamlPane).load_file(Path(path))
+        except Exception:
+            pass
+        self.reload_config()
 
     # ------------------------------------------------------------------- actions
     def action_build(self) -> None:

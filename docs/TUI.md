@@ -65,6 +65,7 @@ sbx-tui --list-profiles      # default + every profiles/<name>
 | **Protocols** | native outbounds/endpoints, jump to the YAML file |
 | **Secrets** | every value of `config/secrets/local.yaml`, masked by default, edit one key at a time |
 | **YAML** | raw editor for **any** file under `config/`: every line is editable, comments survive |
+| **Visual** | the same files as a path/type/value table: edit any node as YAML, add keys/items, delete |
 | **Build** | runs `build --check`, streams the log, shows node counts and the semantic diff |
 | **Logs & Probe** | tails the runtime log and runs `probe_folder.py` on `keys/awg3`, `keys/warp` or `keys/links` |
 | **Deploy** | uploads the built artifact over SSH with a SHA-256 check, fetches router logs, runs whitelisted `sbxctl` actions; restart is opt-in |
@@ -80,6 +81,46 @@ Keys: `b` build, `r` reload, `F1` help, `q` quit.
 - Deleting a subscription moves the file to `config/.trash/`, it is never
   unlinked.
 - Secrets are displayed masked; the reveal toggle is explicit.
+
+## Text editor and vim
+
+The YAML tab is a `TextArea` with YAML syntax highlighting (tree-sitter via
+`textual[syntax]`), line numbers and the usual selection/undo shortcuts.
+
+For **real vim** press **Open in vim**: the TUI suspends, `$EDITOR` (or
+`$VISUAL`, `vim` by default) opens the file with the full editor you already
+use, and on exit the file is validated and reloaded. This is genuine vim
+compatibility, not a re-implementation: macros, plugins, `:commands`, search and
+syntax highlighting all come from your editor.
+
+```bash
+EDITOR=nvim run-tui.sh      # or set VISUAL
+```
+
+If the editor is not installed, the button reports it instead of failing the
+app.
+
+## Visual editor
+
+The Visual tab renders the selected file as a flattened table:
+
+```text
+/                       map     3 key(s)
+metadata                map     2 key(s)
+metadata.name           scalar  Example
+transforms[0].pattern   scalar  ([🇦-🇿]{2})
+```
+
+- **Edit** replaces the selected node with YAML text (scalars, mappings, lists);
+- **Add key** adds an entry to the selected mapping;
+- **Add item** appends to the selected list;
+- **Delete** removes the selected node (the root cannot be deleted).
+
+Every operation goes through the same validated save as the text editor:
+round-trip YAML, atomic write, `.bak`, and rollback if the profile stops
+loading. The Visual tab works for *every* file, including ones without a
+dedicated form; subscriptions, routing, rules, selectors, protocols and secrets
+have specialised forms in their own tabs.
 
 ## Build and deploy
 

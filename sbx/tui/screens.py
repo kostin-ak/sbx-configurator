@@ -28,6 +28,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from . import routing as routing_helpers
 from . import rules as rule_helpers
 from . import transforms as transform_helpers
+from . import yamltree
 from .profiles import list_profiles
 from .services import SBXCTL_ACTIONS, SourcePreview, artifact_info, list_imports, read_logs
 from .store import ConfigStore, Document, coerce, mask
@@ -733,6 +734,64 @@ class ImportModal(ModalScreen[bool]):
         self.dismiss(False)
 
 
+class TextValueModal(ModalScreen[str]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, title: str, text: str) -> None:
+        super().__init__()
+        self.title_text = title
+        self.text = text
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="modal wide"):
+            yield Static(self.title_text, classes="modal-title")
+            yield TextArea(self.text, language="yaml", id="value")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(None)
+            return
+        self.dismiss(self.query_one("#value", TextArea).text)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class KeyValueModal(ModalScreen[tuple]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, title: str) -> None:
+        super().__init__()
+        self.title_text = title
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="modal wide"):
+            yield Static(self.title_text, classes="modal-title")
+            yield Label("Key")
+            yield Input(id="key")
+            yield Label("Value (YAML)")
+            yield TextArea("", language="yaml", id="value")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(None)
+            return
+        key = self.query_one("#key", Input).value.strip()
+        if not key:
+            self.app.notify("key is required", severity="error")
+            return
+        self.dismiss((key, self.query_one("#value", TextArea).text))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 # ---------------------------------------------------------------------------- panes
 
 
@@ -1277,6 +1336,7 @@ class YamlPane(Vertical):
             yield Button("Load", id="yaml-load")
             yield Button("Save", id="yaml-save", variant="primary")
             yield Button("Reload", id="yaml-reload")
+            yield Button("Open in vim", id="yaml-vim")
         yield TextArea("", language="yaml", id="yaml-editor")
 
     def on_mount(self) -> None:
@@ -1313,6 +1373,8 @@ class YamlPane(Vertical):
             return
         if event.button.id == "yaml-load":
             self.load_file(path)
+        elif event.button.id == "yaml-vim":
+            self.app.open_in_editor(path)
         elif event.button.id == "yaml-save":
             text = self.query_one("#yaml-editor", TextArea).text
             try:
@@ -1322,6 +1384,153 @@ class YamlPane(Vertical):
                 return
             self.app.notify(f"saved {path.name}")
             self.app.reload_config()
+
+
+class VisualPane(Vertical):
+    def __init__(self) -> None:
+        super().__init__()
+        self._document: Document | None = None
+        self._rows: list[yamltree.Node] = []
+        self._pending: yamltree.Node | None = None
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(classes="actions"):
+            yield Select([], id="visual-file", prompt="Select file")
+            yield Button("Load", id="visual-load")
+            yield Button("Edit", id="visual-edit", variant="primary")
+            yield Button("Add key", id="visual-add-key")
+            yield Button("Add item", id="visual-add-item")
+            yield Button("Delete", id="visual-delete", variant="error")
+            yield Button("Reload", id="visual-reload")
+        yield DataTable(id="visual-table", cursor_type="row")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#visual-table", DataTable)
+        table.add_columns("Path", "Type", "Value")
+        self.refresh_files()
+
+    def refresh_files(self) -> None:
+        select = self.query_one("#visual-file", Select)
+        options = [(self.app.store.relative(path), str(path)) for path in self.app.store.files()]
+        select.set_options(options)
+
+    def current_path(self) -> Path | None:
+        select = self.query_one("#visual-file", Select)
+        if select.value in (None, Select.BLANK):
+            return None
+        return Path(str(select.value))
+
+    def load_file(self, path: Path) -> None:
+        try:
+            document = self.app.store.load(path)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error")
+            return
+        self._document = document
+        self._rows = yamltree.flatten(document.data)
+        table = self.query_one("#visual-table", DataTable)
+        table.clear()
+        for index, node in enumerate(self._rows):
+            table.add_row(node.label, node.kind, node.preview, key=str(index))
+        select = self.query_one("#visual-file", Select)
+        select.value = str(path)
+
+    def selected(self) -> yamltree.Node | None:
+        table = self.query_one("#visual-table", DataTable)
+        if table.row_count == 0:
+            return None
+        key = table.coordinate_to_cell_key((table.cursor_row, 0)).row_key.value
+        try:
+            return self._rows[int(str(key))]
+        except (ValueError, IndexError):
+            return None
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        identifier = event.button.id
+        if identifier == "visual-reload":
+            self.refresh_files()
+            return
+        path = self.current_path()
+        if path is None:
+            self.app.notify("select a file first", severity="warning")
+            return
+        if identifier == "visual-load":
+            self.load_file(path)
+            return
+        node = self.selected()
+        if node is None:
+            self.app.notify("select a row first", severity="warning")
+            return
+        self._pending = node
+        if identifier == "visual-edit":
+            value = self._document.data if not node.path else yamltree.get(self._document.data, node.path)
+            self.app.push_screen(TextValueModal(f"Edit {node.label}", yamltree.dump_value(value)), self._apply_edit)
+        elif identifier == "visual-add-key":
+            self.app.push_screen(KeyValueModal(f"Add key to {node.label}"), self._apply_add_key)
+        elif identifier == "visual-add-item":
+            self.app.push_screen(TextValueModal(f"Add item to {node.label}", ""), self._apply_add_item)
+        elif identifier == "visual-delete":
+            if not node.path:
+                self.app.notify("the root cannot be removed", severity="warning")
+                return
+            self.app.push_screen(ConfirmModal(f"Delete {node.label}?"), self._apply_delete)
+
+    def _apply_edit(self, text: str | None) -> None:
+        if text is None or self._pending is None or self._document is None:
+            return
+        try:
+            value = yamltree.parse_value(text)
+            if not self._pending.path:
+                if not isinstance(value, dict):
+                    raise ValueError("the root must be a mapping")
+                self._document.data = value
+            else:
+                yamltree.set_value(self._document.data, self._pending.path, value)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self._save()
+
+    def _apply_add_key(self, result: tuple | None) -> None:
+        if not result or self._pending is None or self._document is None:
+            return
+        key, text = result
+        try:
+            yamltree.add_key(self._document.data, self._pending.path, key, yamltree.parse_value(text))
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self._save()
+
+    def _apply_add_item(self, text: str | None) -> None:
+        if text is None or self._pending is None or self._document is None:
+            return
+        try:
+            yamltree.append_item(self._document.data, self._pending.path, yamltree.parse_value(text))
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self._save()
+
+    def _apply_delete(self, confirmed: bool | None) -> None:
+        if not confirmed or self._pending is None or self._document is None:
+            return
+        try:
+            yamltree.delete(self._document.data, self._pending.path)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self._save()
+
+    def _save(self) -> None:
+        assert self._document is not None
+        try:
+            self.app.store.save(self._document)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self.load_file(self._document.path)
+        self.app.reload_config()
 
 
 class BuildPane(Vertical):
