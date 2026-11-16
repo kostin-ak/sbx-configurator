@@ -1,5 +1,7 @@
 # sbx-configurator
 
+[![CI](https://github.com/kostin-ak/sbx-configurator/actions/workflows/ci.yml/badge.svg)](https://github.com/kostin-ak/sbx-configurator/actions/workflows/ci.yml)
+
 Declarative pipeline that turns subscription links and raw configs into a
 validated [sing-box](https://sing-box.sagernet.org/) configuration for an
 OpenWrt router, without ever touching the running service until you ask.
