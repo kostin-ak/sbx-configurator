@@ -131,6 +131,7 @@ link folders.
 ```bash
 python -m sbx.cli build --check          # build + validate + sing-box check
 python -m sbx.cli check --config FILE    # checks only
+python -m sbx.cli lint                   # cross-reference checks (categories, policies, selectors)
 python -m sbx.cli srs                    # compile SRS rule-sets only
 python -m sbx.cli proxy-only ...         # isolated runtime without TUN
 python -m sbx.cli pack / unpack ...      # release archives
@@ -151,10 +152,11 @@ sbx-tui --list-profiles
 sbx-tui
 ```
 
-Dashboard, sources with node preview, routing, selectors, protocols, secrets,
-a raw YAML editor for every file, build with log and diff, logs/probe, and
-artifact deploy over SSH. Comments survive edits, every save is validated and
-rolled back on error, and the service is never restarted automatically.
+Dashboard with a profile switcher and lint, sources with node preview and
+transforms, routing forms, selectors, protocols, secrets, a raw YAML editor for
+every file, build with log and diff, logs/probe, and artifact deploy over SSH.
+Comments survive edits, every save is validated and rolled back on error, and
+the service is never restarted automatically.
 See [docs/TUI.md](docs/TUI.md).
 
 ## Router deployment

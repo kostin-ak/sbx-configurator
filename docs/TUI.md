@@ -40,8 +40,8 @@ sbx-tui --list-profiles      # default + every profiles/<name>
 
 | Tab | What it does |
 |---|---|
-| **Dashboard** | profile, artifact hash/size, subscription counts, Build/Deploy/Reload |
-| **Sources** | add/edit/toggle/archive subscriptions, fetch a URL into the cache, preview parsed nodes and types, edit transforms, preview resulting names |
+| **Dashboard** | profile switcher, artifact hash/size, subscription counts, Lint, Build/Deploy/Reload |
+| **Sources** | add/edit/toggle/archive subscriptions, enable/disable all, fetch a URL into the cache, preview parsed nodes and types, edit transforms, preview resulting names |
 | **Routing** | devices, groups and policies with add/edit/delete forms and category hints |
 | **Selectors** | add/edit/delete selector templates (`tag`, `type`, `filter`, `prefer`) |
 | **Protocols** | native outbounds/endpoints, jump to the YAML file |
@@ -73,6 +73,21 @@ Keys: `b` build, `r` reload, `F1` help, `q` quit.
   service unless you flip it.
 - Builds are never executed on the router from the TUI.
 
+## Lint
+
+The Dashboard has a **Lint** button (and the CLI has `sbxctl lint`). It checks
+what the schema cannot see:
+
+- categories referencing unknown `rule_set` tags;
+- policies referencing unknown categories, devices or groups;
+- group members that do not exist;
+- duplicate device addresses;
+- `defaults.final` / `defaults.catch_all` pointing at unknown categories;
+- duplicate selector names/tags and invalid regexes in selectors and transforms;
+- a final `load_config` pass for schema errors.
+
+Errors and warnings are listed in a modal; nothing is written.
+
 ## Why not on the router
 
 A full build parses every node, compiles SRS rule-sets and merges JSON. On a
@@ -81,8 +96,7 @@ device. The TUI runs on a workstation and talks to the router over SSH.
 
 ## Roadmap
 
-- dedicated routing forms (device → groups → policies) instead of raw YAML;
-- per-source transform editor with live preview of renamed tags;
-- selector member preview against the last build;
-- remote log tail and `sbxctl` actions from the Deploy tab;
-- profile switcher inside the UI.
+- editing `categories.yaml` and `rule-sets.yaml` with rule validation;
+- batch operations across subscriptions (clone definitions, apply a template);
+- export/import of a subscription together with its transforms;
+- `sbxctl` actions (fetch, rollback, probe) from the Deploy tab.
