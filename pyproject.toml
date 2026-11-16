@@ -14,10 +14,12 @@ dependencies = [
 
 [project.optional-dependencies]
 router = ["paramiko>=3.4"]
+tui = ["textual>=0.85", "ruamel.yaml>=0.18"]
 dev = ["pytest>=8"]
 
 [project.scripts]
 sbxctl = "sbx.cli:main"
+sbx-tui = "sbx.tui:main"
 
 [tool.setuptools.packages.find]
 include = ["sbx*"]

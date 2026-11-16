@@ -138,6 +138,23 @@ On the router the same stages are available through `/root/sbxctl`:
 `status`, `fetch`, `sync`, `srs`, `build`, `check`, `apply`, `refresh`,
 `restart`, `rollback`, `releases`, `probe`, `logs`, `backup`.
 
+## TUI
+
+An optional terminal configurator edits the same YAML files without touching
+the pipeline code:
+
+```bash
+pip install -e ".[tui]"
+sbx-tui --list-profiles
+sbx-tui
+```
+
+Dashboard, sources with node preview, routing, selectors, protocols, secrets,
+a raw YAML editor for every file, build with log and diff, logs/probe, and
+artifact deploy over SSH. Comments survive edits, every save is validated and
+rolled back on error, and the service is never restarted automatically.
+See [docs/TUI.md](docs/TUI.md).
+
 ## Router deployment
 
 ```bash
