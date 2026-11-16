@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from textual import work
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 
 from . import services
+from ..lint import has_errors, lint_config as run_lint, summarize
 from .profiles import get_profile, list_profiles, project_root
 from .screens import (
     BuildPane,
@@ -53,7 +55,8 @@ class SbxTui(App):
 
     def __init__(self, profile_name: str = "default", root=None) -> None:
         super().__init__()
-        self.profile = get_profile(profile_name, root)
+        self.root = Path(root).resolve() if root else project_root()
+        self.profile = get_profile(profile_name, self.root)
         self.store = ConfigStore(self.profile)
         self.title = f"sbx · {self.profile.name}"
 
@@ -115,7 +118,24 @@ class SbxTui(App):
             self.query_one(YamlPane).refresh_files()
         except Exception:
             pass
+        try:
+            self.query_one(DashboardPane).refresh_profile_select()
+        except Exception:
+            pass
         self.notify("configuration reloaded")
+
+    def switch_profile(self, name: str) -> None:
+        if name == self.profile.name:
+            return
+        try:
+            profile = get_profile(name, self.root)
+        except KeyError as error:
+            self.notify(str(error), severity="error")
+            return
+        self.profile = profile
+        self.store = ConfigStore(profile)
+        self.title = f"sbx · {name}"
+        self.reload_config()
 
     def open_yaml(self, path) -> None:
         from pathlib import Path
@@ -295,6 +315,45 @@ class SbxTui(App):
                 "YAML (raw editor), Build, Logs & Probe, Deploy."
             )
         )
+
+    def action_lint(self) -> None:
+        self._run_lint()
+
+    @work(thread=True, exclusive=True)
+    def _run_lint(self) -> None:
+        secrets = self.profile.secrets if self.profile.secrets.is_file() else None
+        try:
+            issues = run_lint(self.profile.config_dir, secrets)
+        except Exception as error:  # noqa: BLE001
+            self.call_from_thread(self.notify, str(error), severity="error", timeout=10)
+            return
+        stats = summarize(issues)
+        lines = [f"lint: {stats['errors']} error(s), {stats['warnings']} warning(s)", ""]
+        lines.extend(issue.render() for issue in issues)
+        if not issues:
+            lines.append("no issues")
+        self.call_from_thread(self.push_screen, InfoModal("\n".join(lines)))
+        if has_errors(issues):
+            self.call_from_thread(self.notify, "lint found errors", severity="error")
+
+    def set_all_sources(self, enabled: bool) -> None:
+        updated = 0
+        errors: list[str] = []
+        for document in self.store.subscriptions():
+            metadata = document.data.setdefault("metadata", {})
+            if bool(metadata.get("enabled", True)) == enabled:
+                continue
+            metadata["enabled"] = enabled
+            try:
+                self.store.save(document)
+                updated += 1
+            except Exception as error:  # noqa: BLE001
+                errors.append(f"{document.path.name}: {error}")
+        self.reload_config()
+        if errors:
+            self.notify("; ".join(errors)[:180], severity="error", timeout=10)
+        else:
+            self.notify(f"{updated} subscription(s) {'enabled' if enabled else 'disabled'}")
 
 
 def run(argv: list[str] | None = None) -> int:

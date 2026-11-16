@@ -27,6 +27,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from . import routing as routing_helpers
 from . import transforms as transform_helpers
+from .profiles import list_profiles
 from .services import SourcePreview, artifact_info, read_logs
 from .store import ConfigStore, Document, coerce, mask
 
@@ -582,6 +583,9 @@ class TransformsModal(ModalScreen[bool]):
 
 class DashboardPane(Vertical):
     def compose(self) -> ComposeResult:
+        with Horizontal(classes="actions"):
+            yield Select([], id="profile-select", prompt="Profile")
+            yield Button("Lint", id="dashboard-lint")
         yield Static("", id="dashboard-summary")
         with Horizontal(classes="actions"):
             yield Button("Build", id="build", variant="primary")
@@ -590,7 +594,22 @@ class DashboardPane(Vertical):
         yield RichLog(id="dashboard-log", highlight=True, markup=True)
 
     def on_mount(self) -> None:
+        self.refresh_profile_select()
         self.refresh_summary()
+
+    def refresh_profile_select(self) -> None:
+        select = self.query_one("#profile-select", Select)
+        options = [(profile.name, profile.name) for profile in list_profiles(self.app.root)]
+        select.set_options(options)
+        select.value = self.app.profile.name
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id != "profile-select":
+            return
+        value = event.value
+        if value in (None, Select.BLANK):
+            return
+        self.app.switch_profile(str(value))
 
     def refresh_summary(self) -> None:
         app = self.app
@@ -618,6 +637,8 @@ class DashboardPane(Vertical):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "build":
             self.app.action_build()
+        elif event.button.id == "dashboard-lint":
+            self.app.action_lint()
         elif event.button.id == "deploy":
             self.app.action_open_tab("deploy")
         elif event.button.id == "reload":
@@ -636,6 +657,8 @@ class SourcesPane(Vertical):
             yield Button("Fetch", id="source-fetch")
             yield Button("Transforms", id="source-transforms")
             yield Button("Names", id="source-names")
+            yield Button("All on", id="source-all-on")
+            yield Button("All off", id="source-all-off")
 
     def on_mount(self) -> None:
         table = self.query_one("#sources-table", DataTable)
@@ -675,6 +698,13 @@ class SourcesPane(Vertical):
         identifier = event.button.id
         if identifier == "source-add":
             self.app.push_screen(SubscriptionModal(self.app.store), self._saved)
+            return
+        if identifier in {"source-all-on", "source-all-off"}:
+            enabled = identifier == "source-all-on"
+            self.app.push_screen(
+                ConfirmModal(f"{'Enable' if enabled else 'Disable'} every subscription?"),
+                lambda ok: self.app.set_all_sources(enabled) if ok else None,
+            )
             return
         if document is None:
             self.app.notify("select a subscription first", severity="warning")

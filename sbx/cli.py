@@ -13,6 +13,7 @@ import yaml
 from . import __version__
 from .artifact import atomic_write_json, publish_artifact
 from .diff import masked_json, semantic_diff, summary
+from .lint import has_errors, lint_config, summarize
 from .pack import create_pack, extract_pack, verify_pack
 from .releases import activate_pack, rollback
 from .runtime import make_proxy_only
@@ -206,6 +207,27 @@ def srs(args: argparse.Namespace) -> int:
     return 0
 
 
+def lint(args: argparse.Namespace) -> int:
+    """Check cross-references in the configuration tree."""
+    root = root_of(args)
+    pipeline_path = args.pipeline or root / "config/pipeline.yaml"
+    config = yaml.safe_load(pipeline_path.read_text(encoding="utf-8")) or {}
+    settings = config.get("settings", {})
+
+    def resolve(value: str) -> Path:
+        path = Path(value)
+        return path if path.is_absolute() else root / path
+
+    config_dir = resolve(settings.get("config_root", "config"))
+    secrets = resolve(settings.get("secrets", "config/secrets/local.yaml"))
+    issues = lint_config(config_dir, secrets if secrets.is_file() else None)
+    for issue in issues:
+        print(issue.render())
+    stats = summarize(issues)
+    print(f"{stats['errors']} error(s), {stats['warnings']} warning(s)")
+    return 1 if has_errors(issues) else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="sbxctl")
     parser.add_argument("--root", type=Path, help="project root, defaults to this checkout")
@@ -239,6 +261,10 @@ def build_parser() -> argparse.ArgumentParser:
     command.add_argument("--output", type=Path)
     command.add_argument("--binary", type=Path)
     command.set_defaults(handler=srs)
+
+    command = sub.add_parser("lint", help="check cross-references in the configuration")
+    command.add_argument("--pipeline", type=Path)
+    command.set_defaults(handler=lint)
 
     command = sub.add_parser("check", help="run structural and sing-box checks without restart")
     command.add_argument("--config", type=Path)

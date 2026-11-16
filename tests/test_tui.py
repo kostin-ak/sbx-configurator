@@ -217,6 +217,24 @@ class AppSmokeTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertEqual(app.query_one(TabbedContent).active, "yaml")
 
+    async def test_profile_switch(self):
+        from sbx.tui.app import SbxTui
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(ROOT / "config", root / "config")
+            second = root / "profiles/second"
+            second.mkdir(parents=True)
+            shutil.copytree(ROOT / "config", second / "config")
+
+            app = SbxTui("default", root)
+            async with app.run_test() as pilot:
+                await pilot.pause()
+                app.switch_profile("second")
+                await pilot.pause()
+                self.assertEqual(app.profile.name, "second")
+                self.assertEqual(app.title, "sbx · second")
+
 
 if __name__ == "__main__":
     unittest.main()
