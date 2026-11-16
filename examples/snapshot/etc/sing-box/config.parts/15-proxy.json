@@ -1,0 +1,24 @@
+{
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "in-mixed",
+      "listen": "0.0.0.0",
+      "listen_port": 7890
+    }
+  ],
+  "outbounds":[
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "inbound": ["in-mixed"],
+        "outbound": "direct"
+      }
+    ]
+  }
+}

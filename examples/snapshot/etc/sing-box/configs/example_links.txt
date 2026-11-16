@@ -1,0 +1,8 @@
+# Demo subscription: replace with your own provider links.
+# One share link per line; `#` starts a comment.
+vless://11111111-2222-4333-8444-555555555555@de1.example.com:443?security=tls&sni=de1.example.com&type=tcp&flow=xtls-rprx-vision#%F0%9F%87%A9%F0%9F%87%AA%20Example%20DE%20TCP
+vless://11111111-2222-4333-8444-555555555555@de2.example.com:443?security=tls&sni=de2.example.com&type=ws&path=%2Fws&host=de2.example.com#%F0%9F%87%A9%F0%9F%87%AA%20Example%20DE%20WS
+vless://11111111-2222-4333-8444-555555555555@nl1.example.com:443?security=tls&sni=nl1.example.com&type=grpc&serviceName=grpc#%F0%9F%87%B3%F0%9F%87%B1%20Example%20NL%20gRPC
+vless://11111111-2222-4333-8444-555555555555@us1.example.com:443?security=reality&sni=www.example.com&fp=chrome&pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&sid=0123&type=tcp&flow=xtls-rprx-vision#%F0%9F%87%BA%F0%9F%87%B8%20Example%20US%20Reality
+trojan://example-password@fi1.example.com:443?security=tls&sni=fi1.example.com#%F0%9F%87%AB%F0%9F%87%AE%20Example%20FI%20Trojan
+hysteria2://example-password@se1.example.com:443/?obfs=salamander&obfs-password=example-obfs&sni=se1.example.com&insecure=1#%F0%9F%87%B8%F0%9F%87%AA%20Example%20SE%20HY2

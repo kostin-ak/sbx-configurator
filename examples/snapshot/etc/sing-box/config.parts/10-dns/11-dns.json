@@ -1,0 +1,55 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-hosts",
+        "type": "hosts",
+        "path": "/etc/hosts"
+      },
+      {
+        "tag": "dns-cf",
+        "type": "https",
+        "server": "1.1.1.1"
+      },
+      {
+        "tag": "dns-local",
+        "type": "udp",
+        "server": "77.88.8.8"
+      }      
+    ],
+    "rules": [
+      {
+        "domain_suffix": [
+          "heytapdl.com",
+          "heytapmobile.com",
+          "ads.heytapmobile.com",
+          "app-measurement.com",
+          "metrics.data.hicloud.com",
+          "metrics2.data.hicloud.com",
+          "metrics3.data.hicloud.com",
+          "metrics4.data.hicloud.com",
+          "metrics5.data.hicloud.com",
+          "browser-intake-datadoghq.com",
+          "t1.zcvh.net",
+          "browser.events.data.msn.com",
+          "s.myangular.life"
+        ],
+        "action": "reject"
+      },
+      {
+        "rule_set": "geosite-ru",
+        "server": "dns-local"
+      },
+      {
+        "domain_suffix": [
+          ".ru",
+          ".su",
+          ".rf"
+        ],
+        "server": "dns-local"
+      }
+    ],
+    "final": "dns-cf",
+     "strategy": "ipv4_only"
+  }
+}

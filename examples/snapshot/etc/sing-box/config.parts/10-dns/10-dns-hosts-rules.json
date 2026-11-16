@@ -1,0 +1,13 @@
+{
+  "dns": {
+    "rules": [
+      {
+        "domain_suffix": [
+          "router.random_host",
+          "ntc.party"
+        ],
+        "server": "dns-hosts"
+      }
+    ]
+  }
+}
