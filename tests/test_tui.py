@@ -237,6 +237,13 @@ class ServicesTests(unittest.TestCase):
             tags = services.preview_selector(profile, r"^(?!.*WL).*$")
             self.assertEqual(tags, ["🇩🇪DE Example TCP 01"])
 
+
+    def test_sbxctl_whitelist(self):
+        with self.assertRaises(Exception):
+            services.remote_sbxctl("", "", "rm -rf /")
+        with self.assertRaises(Exception):
+            services.remote_sbxctl("", "", "status")
+
     def test_export_and_import_subscription(self):
         with tempfile.TemporaryDirectory() as tmp:
             profile = make_profile(Path(tmp))

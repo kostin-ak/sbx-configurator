@@ -458,3 +458,26 @@ def _unique_name(profile: Profile, base: str) -> str:
     while f"{base} ({counter})" in existing:
         counter += 1
     return f"{base} ({counter})"
+
+SBXCTL_ACTIONS = ("status", "releases", "fetch", "probe", "logs", "rollback")
+
+
+def remote_sbxctl(host: str, password: str, action: str) -> str:
+    """Run a whitelisted /root/sbxctl action on the router over SSH."""
+
+    if action not in SBXCTL_ACTIONS:
+        raise ServiceError(f"action is not allowed: {action}")
+    if not host:
+        raise ServiceError("router host is required")
+    try:
+        import paramiko
+    except ImportError as error:
+        raise ServiceError("paramiko is not installed (pip install .[router])") from error
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username="root", password=password, timeout=15, banner_timeout=15)
+    try:
+        _, stdout, stderr = client.exec_command(f"/root/sbxctl {action}", timeout=300)
+        return (stdout.read().decode("utf-8", "replace") + stderr.read().decode("utf-8", "replace")).strip()
+    finally:
+        client.close()

@@ -397,3 +397,17 @@ def run(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(run())
+
+    def run_sbxctl(self, host: str, password: str, action: str) -> None:
+        self._log("deploy-log", f"[b]sbxctl {action}…[/b]")
+        self._run_sbxctl(host, password, action)
+
+    @work(thread=True, exclusive=False)
+    def _run_sbxctl(self, host: str, password: str, action: str) -> None:
+        try:
+            text = services.remote_sbxctl(host, password, action)
+        except Exception as error:  # noqa: BLE001
+            self.call_from_thread(self._log, "deploy-log", f"[red]{error}[/red]")
+            return
+        for line in text.splitlines():
+            self.call_from_thread(self._log, "deploy-log", line)

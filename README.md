@@ -152,6 +152,9 @@ sbx-tui --list-profiles
 sbx-tui
 ```
 
+On Windows just double-click `run-tui.bat` (it falls back to the WSL venv); on
+Linux/macOS/WSL use `./run-tui.sh`.
+
 Dashboard with a profile switcher and lint, sources with node preview and
 transforms, routing forms, selectors, protocols, secrets, a raw YAML editor for
 every file, build with log and diff, logs/probe, and artifact deploy over SSH.

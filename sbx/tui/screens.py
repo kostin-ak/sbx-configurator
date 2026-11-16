@@ -29,7 +29,7 @@ from . import routing as routing_helpers
 from . import rules as rule_helpers
 from . import transforms as transform_helpers
 from .profiles import list_profiles
-from .services import SourcePreview, artifact_info, list_imports, read_logs
+from .services import SBXCTL_ACTIONS, SourcePreview, artifact_info, list_imports, read_logs
 from .store import ConfigStore, Document, coerce, mask
 
 
@@ -1375,6 +1375,9 @@ class DeployPane(Vertical):
         yield Label("Restart after install")
         yield Switch(value=False, id="deploy-restart")
         with Horizontal(classes="actions"):
+            yield Select([(action, action) for action in SBXCTL_ACTIONS], value="status", id="sbxctl-action")
+            yield Button("Run sbxctl", id="sbxctl-run")
+        with Horizontal(classes="actions"):
             yield Button("Deploy artifact", id="deploy-run", variant="primary")
             yield Button("Router logs", id="deploy-logs")
         yield RichLog(id="deploy-log", highlight=True, markup=True)
@@ -1387,3 +1390,6 @@ class DeployPane(Vertical):
             self.app.deploy(host, password, restart)
         elif event.button.id == "deploy-logs":
             self.app.fetch_remote_logs(host, password)
+        elif event.button.id == "sbxctl-run":
+            action = str(self.query_one("#sbxctl-action", Select).value)
+            self.app.run_sbxctl(host, password, action)

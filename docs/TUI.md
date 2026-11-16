@@ -17,6 +17,23 @@ sbx-tui
 A "light" install without the extra keeps `sbxctl`, the pipeline and the tests
 working; `sbx-tui` is simply not available.
 
+## Run
+
+```bat
+run-tui.bat
+```
+
+`run-tui.bat` uses a Windows `.venv` when it exists and otherwise runs the TUI
+inside WSL (`WSL_DISTRO` defaults to `archlinux`, the repo is translated to
+`/mnt/<drive>/...`). Arguments are forwarded, e.g.
+`run-tui.bat --profile home`.
+
+On Linux/macOS/WSL:
+
+```bash
+./run-tui.sh
+```
+
 ## Profiles
 
 One project can host several setups:
@@ -50,7 +67,7 @@ sbx-tui --list-profiles      # default + every profiles/<name>
 | **YAML** | raw editor for **any** file under `config/`: every line is editable, comments survive |
 | **Build** | runs `build --check`, streams the log, shows node counts and the semantic diff |
 | **Logs & Probe** | tails the runtime log and runs `probe_folder.py` on `keys/awg3`, `keys/warp` or `keys/links` |
-| **Deploy** | uploads the built artifact over SSH with a SHA-256 check, fetches router logs; restart is opt-in |
+| **Deploy** | uploads the built artifact over SSH with a SHA-256 check, fetches router logs, runs whitelisted `sbxctl` actions; restart is opt-in |
 
 Keys: `b` build, `r` reload, `F1` help, `q` quit.
 
@@ -98,4 +115,4 @@ device. The TUI runs on a workstation and talks to the router over SSH.
 ## Roadmap
 
 - batch operations across subscriptions (clone definitions, apply a template);
-- `sbxctl` actions (fetch, rollback, probe) from the Deploy tab.
+- profile import/export as a bundle.
