@@ -21,6 +21,7 @@ from .screens import (
     LogsPane,
     ProtocolsPane,
     RoutingPane,
+    RulesPane,
     SecretsPane,
     SelectorsPane,
     SourcesPane,
@@ -69,6 +70,8 @@ class SbxTui(App):
                 yield SourcesPane()
             with TabPane("Routing", id="routing"):
                 yield RoutingPane()
+            with TabPane("Rules", id="rules"):
+                yield RulesPane()
             with TabPane("Selectors", id="selectors"):
                 yield SelectorsPane()
             with TabPane("Protocols", id="protocols"):
@@ -102,7 +105,7 @@ class SbxTui(App):
 
     def reload_config(self) -> None:
         self.store.reload()
-        for pane_type in (DashboardPane, SourcesPane, RoutingPane, SelectorsPane, ProtocolsPane, SecretsPane):
+        for pane_type in (DashboardPane, SourcesPane, RoutingPane, RulesPane, SelectorsPane, ProtocolsPane, SecretsPane):
             try:
                 pane = self.query_one(pane_type)
             except Exception:
@@ -354,6 +357,25 @@ class SbxTui(App):
             self.notify("; ".join(errors)[:180], severity="error", timeout=10)
         else:
             self.notify(f"{updated} subscription(s) {'enabled' if enabled else 'disabled'}")
+
+    def export_source(self, name: str) -> None:
+        if not name:
+            return
+        try:
+            target = services.export_subscription(self.profile, name)
+        except Exception as error:  # noqa: BLE001
+            self.notify(str(error), severity="error", timeout=10)
+            return
+        self.notify(f"exported to {target.name}")
+
+    def import_source(self, path: str) -> None:
+        try:
+            target = services.import_subscription(self.profile, Path(path))
+        except Exception as error:  # noqa: BLE001
+            self.notify(str(error), severity="error", timeout=10)
+            return
+        self.reload_config()
+        self.notify(f"imported {target.name}")
 
 
 def run(argv: list[str] | None = None) -> int:

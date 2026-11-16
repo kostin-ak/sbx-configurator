@@ -4,6 +4,8 @@ import unittest
 import json
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 
 HAS_TUI = True
@@ -15,6 +17,7 @@ try:
     from sbx.tui.store import ConfigStore, StoreError
     from sbx.tui import routing as routing_helpers
     from sbx.tui import transforms as transform_helpers
+    from sbx.tui import rules as rule_helpers
     from sbx.tui import services
 except Exception:  # noqa: BLE001
     HAS_TUI = False
@@ -24,6 +27,7 @@ except Exception:  # noqa: BLE001
     StoreError = Exception
     routing_helpers = None
     transform_helpers = None
+    rule_helpers = None
     services = None
 
 TUI_REQUIRED = unittest.skipUnless(HAS_TUI, "TUI dependencies are not installed (pip install .[tui])")
@@ -164,6 +168,50 @@ class TransformHelperTests(unittest.TestCase):
 
 
 @TUI_REQUIRED
+class RulesHelperTests(unittest.TestCase):
+    def test_categories_can_be_edited(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = make_profile(Path(tmp))
+            store = ConfigStore(profile)
+            rule_helpers.upsert_category(
+                store,
+                None,
+                "custom",
+                "⭐ Custom",
+                [{"rule_set": ["geosite-google"]}],
+            )
+            entry = [item for item in rule_helpers.categories(store) if item.get("name") == "custom"][0]
+            self.assertEqual(entry["display"], "⭐ Custom")
+            self.assertEqual(rule_helpers.category_rule_sets(entry), ["geosite-google"])
+            rule_helpers.remove_category(store, "custom")
+            self.assertFalse(any(item.get("name") == "custom" for item in rule_helpers.categories(store)))
+
+    def test_rule_sets_can_be_edited(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = make_profile(Path(tmp))
+            store = ConfigStore(profile)
+            rule_helpers.upsert_rule_set(
+                store,
+                None,
+                "geosite-example",
+                "remote",
+                "binary",
+                "https://example.com/example.srs",
+                "direct",
+            )
+            entry = [item for item in rule_helpers.rule_sets(store) if item.get("tag") == "geosite-example"][0]
+            self.assertEqual(entry["format"], "binary")
+            rule_helpers.remove_rule_set(store, "geosite-example")
+            self.assertFalse(any(item.get("tag") == "geosite-example" for item in rule_helpers.rule_sets(store)))
+
+    def test_rules_yaml_must_be_a_list(self):
+        self.assertEqual(rule_helpers.parse_rules(""), [])
+        self.assertEqual(rule_helpers.parse_rules("- rule_set: [geoip-ru]"), [{"rule_set": ["geoip-ru"]}])
+        with self.assertRaises(ValueError):
+            rule_helpers.parse_rules("rule_set: [geoip-ru]")
+
+
+@TUI_REQUIRED
 class ServicesTests(unittest.TestCase):
     def test_preview_names_applies_transforms_and_naming(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -188,6 +236,22 @@ class ServicesTests(unittest.TestCase):
             profile.artifact.write_text(json.dumps(artifact), encoding="utf-8")
             tags = services.preview_selector(profile, r"^(?!.*WL).*$")
             self.assertEqual(tags, ["🇩🇪DE Example TCP 01"])
+
+    def test_export_and_import_subscription(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = make_profile(Path(tmp))
+            exported = services.export_subscription(profile, "Example")
+            self.assertTrue(exported.is_file())
+            self.assertIn("exports", exported.parts)
+
+            imports = profile.config_dir / "imports"
+            imports.mkdir()
+            shutil.copy2(exported, imports / "copy.yaml")
+            target = services.import_subscription(profile, imports / "copy.yaml")
+            self.assertTrue(target.is_file())
+            self.assertNotEqual(target.name, "10-example.yaml")
+            data = yaml.safe_load(target.read_text(encoding="utf-8"))
+            self.assertEqual(data["metadata"]["name"], "Example (2)")
 
 
 @unittest.skipUnless(HAS_TUI, "textual is not installed")
@@ -214,7 +278,7 @@ class AppSmokeTests(unittest.IsolatedAsyncioTestCase):
         app = SbxTui("default", ROOT)
         async with app.run_test() as pilot:
             await pilot.pause()
-            for tab in ("sources", "routing", "selectors", "protocols", "secrets", "yaml", "build", "logs", "deploy"):
+            for tab in ("sources", "routing", "rules", "selectors", "protocols", "secrets", "yaml", "build", "logs", "deploy"):
                 app.action_open_tab(tab)
                 await pilot.pause()
 

@@ -26,9 +26,10 @@ from textual.widgets import (
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from . import routing as routing_helpers
+from . import rules as rule_helpers
 from . import transforms as transform_helpers
 from .profiles import list_profiles
-from .services import SourcePreview, artifact_info, read_logs
+from .services import SourcePreview, artifact_info, list_imports, read_logs
 from .store import ConfigStore, Document, coerce, mask
 
 
@@ -578,6 +579,160 @@ class TransformsModal(ModalScreen[bool]):
             self.refresh_rows()
 
 
+class CategoryModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore, name: str | None = None) -> None:
+        super().__init__()
+        self.store = store
+        self.name = name
+
+    def compose(self) -> ComposeResult:
+        entry = {}
+        if self.name:
+            for item in rule_helpers.categories(self.store):
+                if isinstance(item, dict) and item.get("name") == self.name:
+                    entry = item
+                    break
+        rules_text = ""
+        if entry.get("rules"):
+            import yaml as pyyaml
+
+            rules_text = pyyaml.safe_dump(list(entry["rules"]), allow_unicode=True, sort_keys=False)
+        with Container(classes="modal wide"):
+            yield Static("Category", classes="modal-title")
+            yield Label("Name")
+            yield Input(value=str(entry.get("name", "")), id="name")
+            yield Label("Display")
+            yield Input(value=str(entry.get("display", "")), id="display")
+            yield Label("Rules (YAML list)")
+            yield TextArea(rules_text, language="yaml", id="rules")
+            yield Label("Disable default rules")
+            yield Switch(value=bool(entry.get("disable_default", False)), id="disable-default")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(False)
+            return
+        name = self.query_one("#name", Input).value.strip()
+        if not name:
+            self.app.notify("name is required", severity="error")
+            return
+        try:
+            rules = rule_helpers.parse_rules(self.query_one("#rules", TextArea).text)
+            rule_helpers.upsert_category(
+                self.store,
+                self.name,
+                name,
+                self.query_one("#display", Input).value.strip(),
+                rules,
+                bool(self.query_one("#disable-default", Switch).value),
+            )
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class RuleSetModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore, tag: str | None = None) -> None:
+        super().__init__()
+        self.store = store
+        self.tag = tag
+
+    def compose(self) -> ComposeResult:
+        entry = {}
+        if self.tag:
+            for item in rule_helpers.rule_sets(self.store):
+                if isinstance(item, dict) and item.get("tag") == self.tag:
+                    entry = item
+                    break
+        with Container(classes="modal wide"):
+            yield Static("Rule set", classes="modal-title")
+            yield Label("Tag")
+            yield Input(value=str(entry.get("tag", "")), id="tag")
+            yield Label("Type")
+            yield Select([("remote", "remote"), ("local", "local")], value=str(entry.get("type", "remote")), id="type")
+            yield Label("Format")
+            yield Select([("binary", "binary"), ("source", "source")], value=str(entry.get("format", "binary")), id="format")
+            yield Label("URL")
+            yield Input(value=str(entry.get("url", "")), id="url")
+            yield Label("Download detour")
+            yield Input(value=str(entry.get("download_detour", "direct")), id="detour")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(False)
+            return
+        tag = self.query_one("#tag", Input).value.strip()
+        if not tag:
+            self.app.notify("tag is required", severity="error")
+            return
+        try:
+            rule_helpers.upsert_rule_set(
+                self.store,
+                self.tag,
+                tag,
+                str(self.query_one("#type", Select).value),
+                str(self.query_one("#format", Select).value),
+                self.query_one("#url", Input).value.strip(),
+                self.query_one("#detour", Input).value.strip(),
+            )
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class ImportModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__()
+        self.store = store
+
+    def compose(self) -> ComposeResult:
+        files = list_imports(self.store.profile)
+        options = [(path.name, str(path)) for path in files]
+        with Container(classes="modal"):
+            yield Static("Import subscription", classes="modal-title")
+            if not options:
+                yield Static(f"Put a subscription YAML into {self.store.profile.config_dir / 'imports'}")
+            else:
+                yield Select(options, id="import-file")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                if options:
+                    yield Button("Import", id="import", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "import":
+            self.dismiss(False)
+            return
+        value = self.query_one("#import-file", Select).value
+        if value in (None, Select.BLANK):
+            self.dismiss(False)
+            return
+        self.dismiss(str(value))
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
 # ---------------------------------------------------------------------------- panes
 
 
@@ -657,6 +812,8 @@ class SourcesPane(Vertical):
             yield Button("Fetch", id="source-fetch")
             yield Button("Transforms", id="source-transforms")
             yield Button("Names", id="source-names")
+            yield Button("Export", id="source-export")
+            yield Button("Import", id="source-import")
             yield Button("All on", id="source-all-on")
             yield Button("All off", id="source-all-off")
 
@@ -725,6 +882,14 @@ class SourcesPane(Vertical):
             self.app.push_screen(TransformsModal(self.app.store, document), lambda _: self.app.reload_config())
         elif identifier == "source-names":
             self.app.preview_names(str(document.data.get("metadata", {}).get("name", "")))
+        elif identifier == "source-export":
+            self.app.export_source(str(document.data.get("metadata", {}).get("name", "")))
+        elif identifier == "source-import":
+            self.app.push_screen(ImportModal(self.app.store), self._imported)
+
+    def _imported(self, path: str | None) -> None:
+        if path:
+            self.app.import_source(path)
 
     def _delete(self, confirmed: bool | None) -> None:
         if not confirmed:
@@ -842,6 +1007,100 @@ class RoutingPane(Vertical):
                 routing_helpers.remove_group(self.app.store, name)
             else:
                 routing_helpers.remove_policy(self.app.store, name)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=8)
+            return
+        self.refresh_rows()
+        self.app.reload_config()
+
+    def _saved(self, saved: bool | None) -> None:
+        if saved:
+            self.refresh_rows()
+            self.app.reload_config()
+
+
+class RulesPane(Vertical):
+    def compose(self) -> ComposeResult:
+        with TabbedContent():
+            with TabPane("Categories", id="tab-categories"):
+                yield DataTable(id="categories-table", cursor_type="row")
+                with Horizontal(classes="actions"):
+                    yield Button("Add", id="category-add", variant="primary")
+                    yield Button("Edit", id="category-edit")
+                    yield Button("Delete", id="category-delete", variant="error")
+            with TabPane("Rule sets", id="tab-rulesets"):
+                yield DataTable(id="rulesets-table", cursor_type="row")
+                with Horizontal(classes="actions"):
+                    yield Button("Add", id="ruleset-add", variant="primary")
+                    yield Button("Edit", id="ruleset-edit")
+                    yield Button("Delete", id="ruleset-delete", variant="error")
+
+    def on_mount(self) -> None:
+        self.query_one("#categories-table", DataTable).add_columns("Name", "Display", "Rules", "Rule sets")
+        self.query_one("#rulesets-table", DataTable).add_columns("Tag", "Type", "Format", "URL")
+        self.refresh_rows()
+
+    def refresh_rows(self) -> None:
+        categories = self.query_one("#categories-table", DataTable)
+        categories.clear()
+        rulesets = self.query_one("#rulesets-table", DataTable)
+        rulesets.clear()
+        store = self.app.store
+        try:
+            for entry in rule_helpers.categories(store):
+                if not isinstance(entry, dict):
+                    continue
+                categories.add_row(
+                    str(entry.get("name", "")),
+                    str(entry.get("display", "")),
+                    str(len(entry.get("rules", []) or [])),
+                    ", ".join(rule_helpers.category_rule_sets(entry))[:70],
+                    key=str(entry.get("name", "")),
+                )
+            for entry in rule_helpers.rule_sets(store):
+                if not isinstance(entry, dict):
+                    continue
+                rulesets.add_row(
+                    str(entry.get("tag", "")),
+                    str(entry.get("type", "")),
+                    str(entry.get("format", "")),
+                    str(entry.get("url", ""))[:70],
+                    key=str(entry.get("tag", "")),
+                )
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error")
+
+    def _selected(self, table_id: str) -> str | None:
+        table = self.query_one(f"#{table_id}", DataTable)
+        if table.row_count == 0:
+            return None
+        key = table.coordinate_to_cell_key((table.cursor_row, 0)).row_key.value
+        return str(key) if key is not None else None
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        identifier = event.button.id or ""
+        kind, _, action = identifier.partition("-")
+        if action == "add":
+            modal = {"category": CategoryModal, "ruleset": RuleSetModal}[kind]
+            self.app.push_screen(modal(self.app.store), self._saved)
+            return
+        table_id = {"category": "categories-table", "ruleset": "rulesets-table"}[kind]
+        name = self._selected(table_id)
+        if not name:
+            self.app.notify(f"select a {kind} first", severity="warning")
+            return
+        if action == "edit":
+            modal = {"category": CategoryModal, "ruleset": RuleSetModal}[kind]
+            self.app.push_screen(modal(self.app.store, name), self._saved)
+        elif action == "delete":
+            self.app.push_screen(ConfirmModal(f"Delete {kind} {name}?"), lambda ok: self._delete(kind, name) if ok else None)
+
+    def _delete(self, kind: str, name: str) -> None:
+        try:
+            if kind == "category":
+                rule_helpers.remove_category(self.app.store, name)
+            else:
+                rule_helpers.remove_rule_set(self.app.store, name)
         except Exception as error:  # noqa: BLE001
             self.app.notify(str(error), severity="error", timeout=8)
             return

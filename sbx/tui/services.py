@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import Counter
@@ -14,12 +15,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+import yaml
+
 from ..folders import load_folder
 from ..links import decode_base64_payload, parse_link
 from ..loader import load_config
 from ..naming import apply_naming
 from ..transforms import apply_node_rules
 from .profiles import Profile
+from .store import ConfigStore
 
 
 class ServiceError(RuntimeError):
@@ -386,3 +390,71 @@ def deploy(profile: Profile, host: str, password: str, restart: bool) -> str:
         command.append("--restart")
     process = subprocess.run(command, cwd=str(profile.root), env=environment, capture_output=True, text=True, timeout=900)
     return (process.stdout + process.stderr).strip()
+
+
+def export_subscription(profile: Profile, name: str) -> Path:
+    """Copy a subscription file (with transforms) to config/exports."""
+
+    for path in sorted(profile.subscriptions_dir.glob("*.yaml")):
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        metadata = document.get("metadata") or {}
+        if metadata.get("name") == name:
+            target_dir = profile.config_dir / "exports"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / path.name
+            shutil.copy2(path, target)
+            return target
+    raise ServiceError(f"subscription not found: {name}")
+
+
+def list_imports(profile: Profile) -> list[Path]:
+    folder = profile.config_dir / "imports"
+    if not folder.is_dir():
+        return []
+    return sorted(path for path in folder.glob("*.yaml") if path.is_file())
+
+
+def import_subscription(profile: Profile, path: Path) -> Path:
+    """Import a subscription YAML from config/imports under a unique name."""
+
+    if not path.is_file():
+        raise ServiceError(f"file is absent: {path}")
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or data.get("kind") != "Subscription":
+        raise ServiceError("file is not a Subscription document")
+    metadata = data.setdefault("metadata", {})
+    base_name = str(metadata.get("name") or path.stem)
+    metadata["name"] = _unique_name(profile, base_name)
+
+    numbers = []
+    for item in profile.subscriptions_dir.glob("*.yaml"):
+        prefix = item.name.split("-", 1)[0]
+        if prefix.isdigit():
+            numbers.append(int(prefix))
+    prefix = f"{(max(numbers) + 10) if numbers else 10:02d}"
+    slug = "".join(character.lower() if character.isalnum() else "-" for character in metadata["name"])
+    slug = "-".join(part for part in slug.split("-") if part) or "imported"
+    target = profile.subscriptions_dir / f"{prefix}-{slug}.yaml"
+    ConfigStore(profile).create(target, data)
+    return target
+
+
+def _unique_name(profile: Profile, base: str) -> str:
+    existing: set[str] = set()
+    for path in profile.subscriptions_dir.glob("*.yaml"):
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        name = (document.get("metadata") or {}).get("name")
+        if name:
+            existing.add(str(name))
+    if base not in existing:
+        return base
+    counter = 2
+    while f"{base} ({counter})" in existing:
+        counter += 1
+    return f"{base} ({counter})"

@@ -41,8 +41,9 @@ sbx-tui --list-profiles      # default + every profiles/<name>
 | Tab | What it does |
 |---|---|
 | **Dashboard** | profile switcher, artifact hash/size, subscription counts, Lint, Build/Deploy/Reload |
-| **Sources** | add/edit/toggle/archive subscriptions, enable/disable all, fetch a URL into the cache, preview parsed nodes and types, edit transforms, preview resulting names |
+| **Sources** | add/edit/toggle/archive subscriptions, enable/disable all, fetch a URL into the cache, preview parsed nodes and types, edit transforms, preview resulting names, export/import a subscription |
 | **Routing** | devices, groups and policies with add/edit/delete forms and category hints |
+| **Rules** | categories (name, display, YAML rules, `disable_default`) and rule-sets (tag, type, format, URL, detour) |
 | **Selectors** | add/edit/delete selector templates (`tag`, `type`, `filter`, `prefer`) |
 | **Protocols** | native outbounds/endpoints, jump to the YAML file |
 | **Secrets** | every value of `config/secrets/local.yaml`, masked by default, edit one key at a time |
@@ -96,7 +97,5 @@ device. The TUI runs on a workstation and talks to the router over SSH.
 
 ## Roadmap
 
-- editing `categories.yaml` and `rule-sets.yaml` with rule validation;
 - batch operations across subscriptions (clone definitions, apply a template);
-- export/import of a subscription together with its transforms;
 - `sbxctl` actions (fetch, rollback, probe) from the Deploy tab.
