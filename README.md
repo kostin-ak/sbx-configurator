@@ -1,4 +1,4 @@
-# router-vpn-sbx
+# sbx-configurator
 
 Declarative pipeline that turns subscription links and raw configs into a
 validated [sing-box](https://sing-box.sagernet.org/) configuration for an

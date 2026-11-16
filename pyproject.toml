@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "router-vpn-sbx"
+name = "sbx-configurator"
 version = "0.2.0"
 description = "Declarative, testable sing-box configuration pipeline for OpenWrt routers"
 requires-python = ">=3.11"

@@ -41,7 +41,7 @@ def main() -> int:
         if not url:
             continue
         try:
-            response = requests.get(url, timeout=args.timeout, headers={"User-Agent": "router-vpn-sbx/0.1"})
+            response = requests.get(url, timeout=args.timeout, headers={"User-Agent": "sbx-configurator/0.2"})
             response.raise_for_status()
         except Exception as error:
             records.append({"name": subscription["name"], "error": str(error)})

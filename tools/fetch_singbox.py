@@ -20,7 +20,7 @@ API_ROOT = "https://api.github.com/repos/shtorm-7/sing-box-extended/releases/tag
 
 
 def download(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "router-vpn-sbx/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "sbx-configurator/0.2"})
     with urllib.request.urlopen(request, timeout=90) as response:
         return response.read()
 
