@@ -18,11 +18,15 @@ from textual.widgets import (
     Select,
     Static,
     Switch,
+    TabbedContent,
+    TabPane,
     TextArea,
 )
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
+from . import routing as routing_helpers
+from . import transforms as transform_helpers
 from .services import SourcePreview, artifact_info, read_logs
 from .store import ConfigStore, Document, coerce, mask
 
@@ -291,6 +295,288 @@ def _next_prefix(store: ConfigStore) -> str:
     return f"{(max(numbers) + 10) if numbers else 10:02d}"
 
 
+class DeviceModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore, name: str | None = None) -> None:
+        super().__init__()
+        self.store = store
+        self.name = name
+
+    def compose(self) -> ComposeResult:
+        device = {}
+        if self.name:
+            device = routing_helpers.devices(self.store).get(self.name, {}) or {}
+        with Container(classes="modal"):
+            yield Static("Device", classes="modal-title")
+            yield Label("Name")
+            yield Input(value=self.name or "", id="name")
+            yield Label("IPv4 (a.b.c.d/32)")
+            yield Input(value=str(device.get("ipv4", "")), id="ipv4")
+            yield Label("IPv6 (optional)")
+            yield Input(value=str(device.get("ipv6", "")), id="ipv6")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(False)
+            return
+        name = self.query_one("#name", Input).value.strip()
+        if not name:
+            self.app.notify("name is required", severity="error")
+            return
+        if self.name and self.name != name:
+            routing_helpers.remove_device(self.store, self.name)
+        try:
+            routing_helpers.upsert_device(
+                self.store,
+                name,
+                self.query_one("#ipv4", Input).value.strip(),
+                self.query_one("#ipv6", Input).value.strip(),
+            )
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=8)
+            return
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class GroupModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore, name: str | None = None) -> None:
+        super().__init__()
+        self.store = store
+        self.name = name
+
+    def compose(self) -> ComposeResult:
+        members = ""
+        if self.name:
+            entry = routing_helpers.groups(self.store).get(self.name, {}) or {}
+            members = ", ".join(entry.get("members", []) or [])
+        known = ", ".join(sorted(routing_helpers.devices(self.store).keys()))
+        with Container(classes="modal wide"):
+            yield Static("Group", classes="modal-title")
+            yield Label("Name")
+            yield Input(value=self.name or "", id="name")
+            yield Label(f"Members (comma separated) — devices: {known}")
+            yield Input(value=members, id="members")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(False)
+            return
+        name = self.query_one("#name", Input).value.strip()
+        if not name:
+            self.app.notify("name is required", severity="error")
+            return
+        members = [item.strip() for item in self.query_one("#members", Input).value.split(",") if item.strip()]
+        if self.name and self.name != name:
+            routing_helpers.remove_group(self.store, self.name)
+        try:
+            routing_helpers.upsert_group(self.store, name, members)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=8)
+            return
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class PolicyModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore, alias: str | None = None) -> None:
+        super().__init__()
+        self.store = store
+        self.alias = alias
+
+    def compose(self) -> ComposeResult:
+        categories = ""
+        if self.alias:
+            for item in routing_helpers.policies(self.store):
+                if isinstance(item, dict) and item.get("alias") == self.alias:
+                    categories = ", ".join(item.get("categories", []) or [])
+                    break
+        available = ", ".join(routing_helpers.category_names(self.store))
+        with Container(classes="modal wide"):
+            yield Static("Policy", classes="modal-title")
+            yield Label("Alias (device or group name)")
+            yield Input(value=self.alias or "", id="alias")
+            yield Label(f"Categories (comma separated) — available: {available}")
+            yield Input(value=categories, id="categories")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(False)
+            return
+        alias = self.query_one("#alias", Input).value.strip()
+        if not alias:
+            self.app.notify("alias is required", severity="error")
+            return
+        categories = [item.strip() for item in self.query_one("#categories", Input).value.split(",") if item.strip()]
+        if self.alias and self.alias != alias:
+            routing_helpers.remove_policy(self.store, self.alias)
+        try:
+            routing_helpers.upsert_policy(self.store, alias, categories)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class TransformModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore, document: Document, index: int | None = None) -> None:
+        super().__init__()
+        self.store = store
+        self.document = document
+        self.index = index
+
+    def compose(self) -> ComposeResult:
+        entry = {}
+        items = self.document.data.get("transforms") or []
+        if self.index is not None and 0 <= self.index < len(items):
+            entry = items[self.index]
+        params = ""
+        if entry.get("params"):
+            import yaml as pyyaml
+
+            params = pyyaml.safe_dump(entry.get("params"), allow_unicode=True, sort_keys=False)
+        with Container(classes="modal wide"):
+            yield Static("Transform", classes="modal-title")
+            yield Label("Action")
+            yield Select(
+                [("rename", "rename"), ("exclude", "exclude"), ("patch", "patch"), ("random_patch", "random_patch")],
+                value=str(entry.get("action", "rename")),
+                id="action",
+            )
+            yield Label("Pattern (regex)")
+            yield Input(value=str(entry.get("pattern", "")), id="pattern")
+            yield Label("Replacement (rename)")
+            yield Input(value=str(entry.get("replacement", "")), id="replacement")
+            yield Label("Params (YAML, for patch/random_patch)")
+            yield TextArea(params, id="params")
+            yield Label("Stop after this rule")
+            yield Switch(value=bool(entry.get("stop", False)), id="stop")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Save", id="save", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "save":
+            self.dismiss(False)
+            return
+        action = str(self.query_one("#action", Select).value)
+        pattern = self.query_one("#pattern", Input).value
+        replacement = self.query_one("#replacement", Input).value
+        try:
+            params = transform_helpers.parse_params(self.query_one("#params", TextArea).text)
+            transform_helpers.upsert_transform(
+                self.store,
+                self.document,
+                self.index,
+                action,
+                pattern,
+                replacement,
+                params,
+                bool(self.query_one("#stop", Switch).value),
+            )
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=10)
+            return
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class TransformsModal(ModalScreen[bool]):
+    BINDINGS = [("escape", "close", "Close")]
+
+    def __init__(self, store: ConfigStore, document: Document) -> None:
+        super().__init__()
+        self.store = store
+        self.document = document
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="modal wide"):
+            yield Static(str(self.document.data.get("metadata", {}).get("name", "subscription")), classes="modal-title")
+            yield DataTable(id="transforms-table", cursor_type="row")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Add", id="transform-add", variant="primary")
+                yield Button("Edit", id="transform-edit")
+                yield Button("Up", id="transform-up")
+                yield Button("Down", id="transform-down")
+                yield Button("Delete", id="transform-delete", variant="error")
+                yield Button("Close", id="transform-close")
+
+    def on_mount(self) -> None:
+        table = self.query_one("#transforms-table", DataTable)
+        table.add_columns("Action", "Pattern", "Extra")
+        self.refresh_rows()
+
+    def refresh_rows(self) -> None:
+        table = self.query_one("#transforms-table", DataTable)
+        table.clear()
+        for entry in transform_helpers.transforms(self.document):
+            extra = entry.get("replacement") or entry.get("params") or ""
+            table.add_row(str(entry.get("action", "")), str(entry.get("pattern", ""))[:60], str(extra)[:60])
+
+    def _index(self) -> int | None:
+        table = self.query_one("#transforms-table", DataTable)
+        return table.cursor_row if table.row_count else None
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        identifier = event.button.id
+        if identifier == "transform-close":
+            self.dismiss(True)
+            return
+        if identifier == "transform-add":
+            self.app.push_screen(TransformModal(self.store, self.document), self._saved)
+            return
+        index = self._index()
+        if index is None:
+            self.app.notify("select a transform first", severity="warning")
+            return
+        if identifier == "transform-edit":
+            self.app.push_screen(TransformModal(self.store, self.document, index), self._saved)
+        elif identifier == "transform-delete":
+            try:
+                transform_helpers.remove_transform(self.store, self.document, index)
+            except Exception as error:  # noqa: BLE001
+                self.app.notify(str(error), severity="error", timeout=8)
+                return
+            self.refresh_rows()
+        elif identifier in {"transform-up", "transform-down"}:
+            delta = -1 if identifier == "transform-up" else 1
+            try:
+                transform_helpers.move_transform(self.store, self.document, index, delta)
+            except Exception as error:  # noqa: BLE001
+                self.app.notify(str(error), severity="error", timeout=8)
+                return
+            self.refresh_rows()
+
+    def _saved(self, saved: bool | None) -> None:
+        if saved:
+            self.refresh_rows()
+
+
 # ---------------------------------------------------------------------------- panes
 
 
@@ -348,6 +634,8 @@ class SourcesPane(Vertical):
             yield Button("Delete", id="source-delete", variant="error")
             yield Button("Preview", id="source-preview")
             yield Button("Fetch", id="source-fetch")
+            yield Button("Transforms", id="source-transforms")
+            yield Button("Names", id="source-names")
 
     def on_mount(self) -> None:
         table = self.query_one("#sources-table", DataTable)
@@ -403,6 +691,10 @@ class SourcesPane(Vertical):
             self.app.preview_source(str(document.data.get("metadata", {}).get("name", "")))
         elif identifier == "source-fetch":
             self.app.fetch_source(str(document.data.get("metadata", {}).get("name", "")))
+        elif identifier == "source-transforms":
+            self.app.push_screen(TransformsModal(self.app.store, document), lambda _: self.app.reload_config())
+        elif identifier == "source-names":
+            self.app.preview_names(str(document.data.get("metadata", {}).get("name", "")))
 
     def _delete(self, confirmed: bool | None) -> None:
         if not confirmed:
@@ -431,45 +723,105 @@ class SourcesPane(Vertical):
 
 class RoutingPane(Vertical):
     def compose(self) -> ComposeResult:
-        yield DataTable(id="routing-table", cursor_type="row")
-        with Horizontal(classes="actions"):
-            yield Button("Open devices", id="open-devices")
-            yield Button("Open groups", id="open-groups")
-            yield Button("Open policies", id="open-policies")
+        with TabbedContent():
+            with TabPane("Devices", id="tab-devices"):
+                yield DataTable(id="devices-table", cursor_type="row")
+                with Horizontal(classes="actions"):
+                    yield Button("Add", id="device-add", variant="primary")
+                    yield Button("Edit", id="device-edit")
+                    yield Button("Delete", id="device-delete", variant="error")
+            with TabPane("Groups", id="tab-groups"):
+                yield DataTable(id="groups-table", cursor_type="row")
+                with Horizontal(classes="actions"):
+                    yield Button("Add", id="group-add", variant="primary")
+                    yield Button("Edit", id="group-edit")
+                    yield Button("Delete", id="group-delete", variant="error")
+            with TabPane("Policies", id="tab-policies"):
+                yield DataTable(id="policies-table", cursor_type="row")
+                with Horizontal(classes="actions"):
+                    yield Button("Add", id="policy-add", variant="primary")
+                    yield Button("Edit", id="policy-edit")
+                    yield Button("Delete", id="policy-delete", variant="error")
+                yield Static("", id="routing-hint")
 
     def on_mount(self) -> None:
-        table = self.query_one("#routing-table", DataTable)
-        table.add_columns("Kind", "Name", "Details")
+        self.query_one("#devices-table", DataTable).add_columns("Name", "IPv4", "IPv6")
+        self.query_one("#groups-table", DataTable).add_columns("Name", "Members")
+        self.query_one("#policies-table", DataTable).add_columns("Alias", "Categories")
         self.refresh_rows()
 
     def refresh_rows(self) -> None:
-        table = self.query_one("#routing-table", DataTable)
-        table.clear()
+        devices = self.query_one("#devices-table", DataTable)
+        devices.clear()
+        groups = self.query_one("#groups-table", DataTable)
+        groups.clear()
+        policies = self.query_one("#policies-table", DataTable)
+        policies.clear()
+        store = self.app.store
         try:
-            loaded = self.app.services_load()
-            routing = loaded.routing
+            for name, entry in routing_helpers.devices(store).items():
+                item = entry if isinstance(entry, dict) else {}
+                devices.add_row(str(name), str(item.get("ipv4", "")), str(item.get("ipv6", "")), key=str(name))
+            for name, entry in routing_helpers.groups(store).items():
+                item = entry if isinstance(entry, dict) else {}
+                groups.add_row(str(name), ", ".join(item.get("members", []) or []), key=str(name))
+            for policy in routing_helpers.policies(store):
+                if isinstance(policy, dict):
+                    policies.add_row(
+                        str(policy.get("alias", "?")),
+                        ", ".join(policy.get("categories", []) or []),
+                        key=str(policy.get("alias", "")),
+                    )
         except Exception as error:  # noqa: BLE001
-            table.add_row("error", str(error)[:80], "")
-            return
-        for name, item in (routing.get("devices") or {}).items():
-            addresses = ", ".join(filter(None, [item.get("ipv4"), item.get("ipv6")])) if isinstance(item, dict) else str(item)
-            table.add_row("device", name, addresses)
-        for name, item in (routing.get("groups") or {}).items():
-            members = ", ".join(item.get("members", []) if isinstance(item, dict) else [])
-            table.add_row("group", name, members)
-        for policy in routing.get("policies") or []:
-            if isinstance(policy, dict):
-                table.add_row("policy", str(policy.get("alias", "?")), ", ".join(policy.get("categories", [])))
+            self.app.notify(str(error), severity="error")
+        self.query_one("#routing-hint", Static).update(
+            "Policies map a device or group alias to categories. "
+            "Available categories: " + ", ".join(routing_helpers.category_names(store))
+        )
+
+    def _selected(self, table_id: str) -> str | None:
+        table = self.query_one(f"#{table_id}", DataTable)
+        if table.row_count == 0:
+            return None
+        key = table.coordinate_to_cell_key((table.cursor_row, 0)).row_key.value
+        return str(key) if key is not None else None
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        mapping = {
-            "open-devices": "devices.yaml",
-            "open-groups": "groups.yaml",
-            "open-policies": "policies.yaml",
-        }
-        filename = mapping.get(event.button.id or "")
-        if filename:
-            self.app.open_yaml(self.app.store.profile.routing_dir / filename)
+        identifier = event.button.id or ""
+        kind, _, action = identifier.partition("-")
+        if action == "add":
+            modal = {"device": DeviceModal, "group": GroupModal, "policy": PolicyModal}[kind]
+            self.app.push_screen(modal(self.app.store), self._saved)
+            return
+        table_id = {"device": "devices-table", "group": "groups-table", "policy": "policies-table"}[kind]
+        name = self._selected(table_id)
+        if not name:
+            self.app.notify(f"select a {kind} first", severity="warning")
+            return
+        if action == "edit":
+            modal = {"device": DeviceModal, "group": GroupModal, "policy": PolicyModal}[kind]
+            self.app.push_screen(modal(self.app.store, name), self._saved)
+        elif action == "delete":
+            self.app.push_screen(ConfirmModal(f"Delete {kind} {name}?"), lambda ok: self._delete(kind, name) if ok else None)
+
+    def _delete(self, kind: str, name: str) -> None:
+        try:
+            if kind == "device":
+                routing_helpers.remove_device(self.app.store, name)
+            elif kind == "group":
+                routing_helpers.remove_group(self.app.store, name)
+            else:
+                routing_helpers.remove_policy(self.app.store, name)
+        except Exception as error:  # noqa: BLE001
+            self.app.notify(str(error), severity="error", timeout=8)
+            return
+        self.refresh_rows()
+        self.app.reload_config()
+
+    def _saved(self, saved: bool | None) -> None:
+        if saved:
+            self.refresh_rows()
+            self.app.reload_config()
 
 
 class SelectorsPane(Vertical):
@@ -479,6 +831,7 @@ class SelectorsPane(Vertical):
             yield Button("Add", id="selector-add", variant="primary")
             yield Button("Edit", id="selector-edit")
             yield Button("Delete", id="selector-delete", variant="error")
+            yield Button("Preview", id="selector-preview")
 
     def on_mount(self) -> None:
         table = self.query_one("#selectors-table", DataTable)
@@ -514,6 +867,11 @@ class SelectorsPane(Vertical):
         index = self._index()
         if index is None:
             self.app.notify("select a selector first", severity="warning")
+            return
+        if identifier == "selector-preview":
+            document = self.app.store.selectors()
+            entry = document.data["templates"][index]
+            self.app.preview_selector(str(entry.get("filter", ".*")), str(entry.get("prefer", "")))
             return
         if identifier == "selector-edit":
             self.app.push_screen(SelectorModal(self.app.store, index), self._saved)
@@ -729,11 +1087,14 @@ class DeployPane(Vertical):
         yield Switch(value=False, id="deploy-restart")
         with Horizontal(classes="actions"):
             yield Button("Deploy artifact", id="deploy-run", variant="primary")
+            yield Button("Router logs", id="deploy-logs")
         yield RichLog(id="deploy-log", highlight=True, markup=True)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        host = self.query_one("#deploy-host", Input).value.strip()
+        password = self.query_one("#deploy-password", Input).value
         if event.button.id == "deploy-run":
-            host = self.query_one("#deploy-host", Input).value.strip()
-            password = self.query_one("#deploy-password", Input).value
             restart = bool(self.query_one("#deploy-restart", Switch).value)
             self.app.deploy(host, password, restart)
+        elif event.button.id == "deploy-logs":
+            self.app.fetch_remote_logs(host, password)

@@ -41,15 +41,15 @@ sbx-tui --list-profiles      # default + every profiles/<name>
 | Tab | What it does |
 |---|---|
 | **Dashboard** | profile, artifact hash/size, subscription counts, Build/Deploy/Reload |
-| **Sources** | add/edit/toggle/archive subscriptions, fetch a URL into the cache, preview parsed nodes and types before building |
-| **Routing** | devices, groups and policies at a glance, jump to the YAML file |
+| **Sources** | add/edit/toggle/archive subscriptions, fetch a URL into the cache, preview parsed nodes and types, edit transforms, preview resulting names |
+| **Routing** | devices, groups and policies with add/edit/delete forms and category hints |
 | **Selectors** | add/edit/delete selector templates (`tag`, `type`, `filter`, `prefer`) |
 | **Protocols** | native outbounds/endpoints, jump to the YAML file |
 | **Secrets** | every value of `config/secrets/local.yaml`, masked by default, edit one key at a time |
 | **YAML** | raw editor for **any** file under `config/`: every line is editable, comments survive |
 | **Build** | runs `build --check`, streams the log, shows node counts and the semantic diff |
 | **Logs & Probe** | tails the runtime log and runs `probe_folder.py` on `keys/awg3`, `keys/warp` or `keys/links` |
-| **Deploy** | uploads the built artifact over SSH with a SHA-256 check; restart is opt-in |
+| **Deploy** | uploads the built artifact over SSH with a SHA-256 check, fetches router logs; restart is opt-in |
 
 Keys: `b` build, `r` reload, `F1` help, `q` quit.
 

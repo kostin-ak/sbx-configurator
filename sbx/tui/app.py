@@ -179,6 +179,50 @@ class SbxTui(App):
             return
         self._preview(name, save_cache=True)
 
+    def preview_names(self, name: str) -> None:
+        if not name:
+            return
+        self._run_preview_names(name)
+
+    @work(thread=True, exclusive=False)
+    def _run_preview_names(self, name: str) -> None:
+        try:
+            pairs = services.preview_names(self.profile, name)
+        except Exception as error:  # noqa: BLE001
+            self.call_from_thread(self.notify, str(error), severity="error", timeout=10)
+            return
+        lines = [f"names for {name}", ""]
+        lines.extend(f"{original}\n  → {renamed}" for original, renamed in pairs)
+        self.call_from_thread(self.push_screen, InfoModal("\n".join(lines)))
+
+    def preview_selector(self, filter_pattern: str, prefer: str = "") -> None:
+        self._run_preview_selector(filter_pattern, prefer)
+
+    @work(thread=True, exclusive=False)
+    def _run_preview_selector(self, filter_pattern: str, prefer: str) -> None:
+        try:
+            tags = services.preview_selector(self.profile, filter_pattern, prefer)
+        except Exception as error:  # noqa: BLE001
+            self.call_from_thread(self.notify, str(error), severity="error", timeout=10)
+            return
+        lines = [f"selector: {filter_pattern}", f"members: {len(tags)}", ""]
+        lines.extend(tags)
+        self.call_from_thread(self.push_screen, InfoModal("\n".join(lines)))
+
+    def fetch_remote_logs(self, host: str, password: str) -> None:
+        self._log("deploy-log", f"[b]fetching logs from {host or '?'}…[/b]")
+        self._run_remote_logs(host, password)
+
+    @work(thread=True, exclusive=False)
+    def _run_remote_logs(self, host: str, password: str) -> None:
+        try:
+            text = services.remote_logs(host, password)
+        except Exception as error:  # noqa: BLE001
+            self.call_from_thread(self._log, "deploy-log", f"[red]{error}[/red]")
+            return
+        for line in text.splitlines():
+            self.call_from_thread(self._log, "deploy-log", line)
+
     @work(thread=True, exclusive=False)
     def _preview(self, name: str, save_cache: bool) -> None:
         try:

@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -15,6 +17,8 @@ from typing import Any, Callable
 from ..folders import load_folder
 from ..links import decode_base64_payload, parse_link
 from ..loader import load_config
+from ..naming import apply_naming
+from ..transforms import apply_node_rules
 from .profiles import Profile
 
 
@@ -94,6 +98,116 @@ def preview_source(profile: Profile, name: str) -> SourcePreview:
     else:
         raise ServiceError("subscription has neither url, file nor folder")
     return _preview_from_text(name, kind, text)
+
+
+def _source_nodes(profile: Profile, subscription: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return raw nodes before transforms (outbounds and endpoints)."""
+
+    if "folder" in subscription:
+        result = load_folder(subscription["folder"])
+        return list(result["endpoints"]) + list(result["outbounds"])
+    text = ""
+    if "url" in subscription:
+        import requests
+
+        response = requests.get(subscription["url"], timeout=45)
+        response.raise_for_status()
+        text = response.text
+    elif "file" in subscription:
+        raw = str(subscription["file"])
+        if raw.startswith("/etc/sing-box/"):
+            path = profile.root / "snapshot/etc/sing-box" / raw[len("/etc/sing-box/") :]
+        else:
+            path = Path(raw)
+            if not path.is_absolute():
+                path = profile.root / "snapshot/etc/sing-box" / raw
+        text = path.read_text(encoding="utf-8")
+    content = decode_base64_payload(text)
+    nodes: list[dict[str, Any]] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("#", ";", "//")):
+            continue
+        try:
+            node = parse_link(line)
+        except Exception:
+            continue
+        if node:
+            nodes.append(node)
+    return nodes
+
+
+def preview_names(profile: Profile, name: str, limit: int = 40) -> list[tuple[str, str]]:
+    """Apply transforms and naming to a source without touching the build."""
+
+    subscription = find_subscription(profile, name)
+    nodes = _source_nodes(profile, subscription)
+    rules = subscription.get("rules") or []
+    processed: list[dict[str, Any]] = []
+    originals: list[str] = []
+    for node in nodes:
+        original = str(node.get("tag", ""))
+        result = apply_node_rules(deepcopy(node), rules)
+        if not result:
+            continue
+        originals.append(original)
+        processed.append(result)
+    apply_naming(processed, name, subscription.get("naming"))
+    pairs = list(zip(originals, [str(node.get("tag", "")) for node in processed]))
+    return pairs[:limit]
+
+
+def preview_selector(profile: Profile, filter_pattern: str, prefer: str = "", limit: int = 60) -> list[str]:
+    """Return the tags of the last artifact that match a selector filter."""
+
+    path = profile.artifact
+    if not path.is_file():
+        raise ServiceError("artifact is absent; build first")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    tags: list[str] = []
+    for item in data.get("outbounds", []):
+        if not isinstance(item, dict) or not item.get("tag"):
+            continue
+        if item.get("type") in {"selector", "urltest", "direct", "block"}:
+            continue
+        tags.append(str(item["tag"]))
+    for item in data.get("endpoints", []):
+        if isinstance(item, dict) and item.get("tag"):
+            tags.append(str(item["tag"]))
+    try:
+        pattern = re.compile(filter_pattern)
+    except re.error as error:
+        raise ServiceError(f"invalid regex: {error}") from error
+    matched = [tag for tag in tags if pattern.search(tag)]
+    if prefer:
+        try:
+            preferred = re.compile(prefer)
+            matched.sort(key=lambda tag: 0 if preferred.search(tag) else 1)
+        except re.error:
+            pass
+    return matched[:limit]
+
+
+def remote_logs(host: str, password: str, lines: int = 200) -> str:
+    if not host:
+        raise ServiceError("router host is required")
+    try:
+        import paramiko
+    except ImportError as error:
+        raise ServiceError("paramiko is not installed (pip install .[router])") from error
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(host, username="root", password=password, timeout=15, banner_timeout=15)
+    try:
+        command = (
+            f"tail -n {int(lines)} /data/sbx/state/local/logs/sing-box.log 2>/dev/null "
+            f"|| tail -n {int(lines)} /data/sbx/state/main/logs/sing-box.log 2>/dev/null "
+            f"|| echo 'no log file'"
+        )
+        _, stdout, stderr = client.exec_command(command, timeout=60)
+        return (stdout.read().decode("utf-8", "replace") + stderr.read().decode("utf-8", "replace")).strip()
+    finally:
+        client.close()
 
 
 def _preview_from_text(name: str, kind: str, text: str) -> SourcePreview:
