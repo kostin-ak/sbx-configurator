@@ -20,6 +20,8 @@ config/local*.yml
 .env
 
 # Public examples must stay tracked even though their folder names look private.
+!examples/snapshot/
+!examples/snapshot/**
 !examples/keys/
 !examples/keys/**
 
