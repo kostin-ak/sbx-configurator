@@ -1,0 +1,17 @@
+openai
+chatgpt
+anthropic
+claude
+perplexity
+gemini
+aistudio
+copilot
+spotify
+netflix
+google
+goog
+deepl
+jetbrains
+openrouter
+ibm
+kilo

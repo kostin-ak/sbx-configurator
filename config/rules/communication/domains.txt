@@ -1,0 +1,51 @@
+# Discord
+discord.com
+*.discord.com
+discord.gg
+*.discord.gg
+discordapp.com
+*.discordapp.com
+discord.media
+*.discord.media
+
+# WhatsApp
+whatsapp.net
+*.whatsapp.net
+
+# Telegram
+telegram.org
+*.telegram.org
+t.me
+*.t.me
+telegram.me
+*.telegram.me
+telegram.dog
+*.telegram.dog
+telesco.pe
+*.telesco.pe
+tdesktop.com
+*.tdesktop.com
+telegra.ph
+*.telegra.ph
+telegram-cdn.org
+*.telegram-cdn.org
+tx.me
+*.tx.me
+telegra.ph
+*.telegra.ph
+telesco.pe
+*.telesco.pe
+graph.org
+*.graph.org
+comments.app
+*.comments.app
+telega.one
+*.telega.one
+tg.dev
+*.tg.dev
+
+# Meta (Instagram & Facebook)
+instagram.com
+cdninstagram.com
+facebook.com
+fbcdn.net

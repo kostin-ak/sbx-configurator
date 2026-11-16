@@ -1,0 +1,18 @@
+# Example: plain share links (hysteria2/vless/trojan/ss) loaded from a folder.
+apiVersion: sbx.shtorm/1
+kind: Subscription
+metadata:
+  name: Links
+  enabled: false
+fetch:
+  folder:
+    path: ${secret:keys.links}
+    parser: share-links
+    include: ["*.txt", "*.list"]
+    recursive: false
+    optional: true
+naming:
+  enabled: true
+selectors:
+  global: true
+  local: []

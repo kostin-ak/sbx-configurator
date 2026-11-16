@@ -1,0 +1,15 @@
+apiVersion: sbx.shtorm/1
+kind: Devices
+devices:
+  Laptop:
+    ipv4: 192.168.1.10/32
+  Phone:
+    ipv4: 192.168.1.11/32
+  Tablet:
+    ipv4: 192.168.1.12/32
+  Tablet2:
+    ipv4: 192.168.1.13/32
+  TV:
+    ipv4: 192.168.1.20/32
+  Speaker:
+    ipv4: 192.168.1.21/32

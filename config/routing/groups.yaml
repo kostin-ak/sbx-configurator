@@ -1,0 +1,16 @@
+apiVersion: sbx.shtorm/1
+kind: Groups
+groups:
+  Direct:
+    members:
+    - Speaker
+  Tablets:
+    members:
+    - Tablet
+    - Tablet2
+  Personal:
+    members:
+    - Tablet
+    - Tablet2
+    - Phone
+    - Laptop

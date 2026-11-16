@@ -1,0 +1,84 @@
+apiVersion: sbx.shtorm/1
+kind: Categories
+categories:
+- name: block
+  display: ⛔️ Block
+  rules:
+  - rule_set:
+    - custom-ru-block
+  disable_default: false
+- name: whitelist
+  display: 🛑 WhiteLists
+  rules:
+  - rule_set:
+    - geosite-cheburnet
+  - ip_cidr:
+    - 94.137.9.174
+  disable_default: false
+- name: direct
+  display: ⭕️
+  rules:
+  - {}
+  disable_default: true
+- name: proxy
+  display: 🚀 Proxy
+  rules:
+  - rule_set:
+    - custom-proxy
+  disable_default: false
+- name: youtube
+  display: 📺 YouTube
+  rules:
+  - rule_set:
+    - custom-youtube
+    - geosite-youtube
+  disable_default: false
+- name: games
+  display: 🎮 Games
+  rules:
+  - rule_set:
+    - custom-games
+  disable_default: false
+- name: ai
+  display: 🤖 AI
+  rules:
+  - rule_set:
+    - custom-ai
+    - geosite-openai
+    - geosite-google
+  disable_default: false
+- name: communication
+  display: 💬 Communication
+  rules:
+  - rule_set:
+    - custom-communication
+  disable_default: false
+- name: tiktok
+  display: 🎵 TikTok
+  rules:
+  - rule_set:
+    - custom-tiktok
+  disable_default: false
+- name: media
+  display: 🎬 Media
+  rules:
+  - rule_set:
+    - custom-media
+  disable_default: false
+- name: single
+  display: ⬥ Single
+  rules:
+  - rule_set:
+    - custom-single
+  disable_default: true
+- name: runet
+  display: 🇷🇺 RuNet
+  rules:
+  - rule_set:
+    - geoip-ru
+    - geosite-ru
+  - domain_suffix:
+    - .ru
+    - .su
+    - .rf
+  disable_default: false

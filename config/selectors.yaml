@@ -1,0 +1,47 @@
+apiVersion: sbx.shtorm/1
+kind: Selectors
+templates:
+- name: proxy
+  tag: 🚀 Proxy
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход)).*$
+  regex: true
+- name: games
+  tag: 🎮 Games
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход)).*$
+  regex: true
+- name: ai
+  tag: 🤖 AI
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход)).*$
+  regex: true
+- name: communication
+  tag: 💬 Communication
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход)).*$
+  regex: true
+- name: youtube
+  tag: 📺 YouTube
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход)).*$
+  regex: true
+- name: tiktok
+  tag: 🎵 TikTok
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход)).*$
+  regex: true
+- name: runet
+  tag: 🇷🇺 RuNet
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход))(?=.*(🇷🇺)).*$
+  regex: true
+- name: media
+  tag: 🎬 Media
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход))(?=.*(🇷🇺)).*$
+  regex: true
+- name: single
+  tag: ⬥ Single [Personal]
+  type: selector
+  filter: ^(?!.*(WL|Whitelist|Обход)).*$

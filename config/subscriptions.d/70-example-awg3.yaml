@@ -1,0 +1,24 @@
+# Example: AmneziaWG/WireGuard configs loaded from a folder.
+# Enable after putting your own *.conf files into keys/awg3 and filling the
+# `keys.awg3` secret in config/secrets/local.yaml.
+apiVersion: sbx.shtorm/1
+kind: Subscription
+metadata:
+  name: AWG
+  enabled: false
+fetch:
+  folder:
+    path: ${secret:keys.awg3}
+    parser: wireguard-conf
+    include: ["*.conf"]
+    recursive: false
+    system: false
+    # Optional: wrap the WireGuard UDP handshake into a working outbound.
+    # Needed when the ISP drops UDP to the WG port. The target must not be a
+    # member of this endpoint (no cycles).
+    # detour: 🔗 AWG Bridge
+naming:
+  enabled: true
+selectors:
+  global: true
+  local: []

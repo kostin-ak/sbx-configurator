@@ -1,0 +1,8 @@
+apiVersion: sbx.shtorm/1
+kind: Sbx
+metadata:
+  name: router-vpn
+spec:
+  subscriptions: subscriptions.d
+  routing: routing
+  protocols: protocols.d

@@ -1,0 +1,5 @@
+output: "custom-youtube"
+
+rules:
+  domain_suffix: 
+    - "domains.txt"

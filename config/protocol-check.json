@@ -1,0 +1,84 @@
+{
+  "dns": {
+    "servers": [{"type": "local", "tag": "default"}]
+  },
+  "inbounds": [
+    {"type": "mixed", "tag": "test-in", "listen": "127.0.0.1", "listen_port": 17891}
+  ],
+  "outbounds": [
+    {"type": "direct", "tag": "direct"},
+    {
+      "type": "mieru", "tag": "mieru-test", "server": "mieru.example.com", "server_port": 27017,
+      "transport": "TCP", "username": "example-user", "password": "example-password",
+      "multiplexing": "MULTIPLEXING_LOW", "mtu": 1400, "handshake_mode": "HANDSHAKE_STANDARD"
+    },
+    {
+      "type": "trusttunnel", "tag": "trusttunnel-test", "server": "tunnel.example.com", "server_port": 443,
+      "username": "example-user", "password": "example-password", "network": ["tcp", "udp"],
+      "health_check": true, "tls": {"enabled": true, "server_name": "tunnel.example.com"}
+    },
+    {
+      "type": "sudoku", "tag": "sudoku-test", "server": "sudoku.example.com", "server_port": 443,
+      "key": "example-key"
+    },
+    {
+      "type": "ssh", "tag": "ssh-test", "server": "ssh.example.com", "server_port": 2222,
+      "user": "example-user", "password": "example-password"
+    },
+    {
+      "type": "call", "tag": "call-test", "platform": "vk", "read_buffer": 32768,
+      "join_link": "https://example.com/test-call"
+    },
+    {
+      "type": "masque", "tag": "masque-test", "system": false, "name": "masque0",
+      "use_http2": false, "use_l4_proxy": true, "use_ipv6": false,
+      "profile": {"detour": "direct", "id": "example-id", "auth_token": "example-token"}
+    },
+    {
+      "type": "vless", "tag": "vless-xhttp-test", "server": "xhttp.example.com", "server_port": 443,
+      "uuid": "9b65b7e1-04c8-4717-8f45-2aa61fd25937",
+      "tls": {"enabled": true, "server_name": "xhttp.example.com", "alpn": "h2"},
+      "transport": {"type": "xhttp", "mode": "stream-up", "host": "xhttp.example.com", "path": "/xhttp", "x_padding_bytes": "100-1000"}
+    },
+    {
+      "type": "parser", "tag": "parser-test",
+      "link": "vless://9b65b7e1-04c8-4717-8f45-2aa61fd25937@example.com:443?security=tls&type=ws#example"
+    },
+    {
+      "type": "fallback", "tag": "fallback-test", "outbounds": ["mieru-test", "trusttunnel-test", "direct"]
+    },
+    {
+      "type": "bond", "tag": "bond-test", "outbounds": [
+        {
+          "outbound": {"type": "vless", "server": "bond.example.com", "server_port": 443, "uuid": "9b65b7e1-04c8-4717-8f45-2aa61fd25937"},
+          "download_ratio": 50, "upload_ratio": 50
+        },
+        {
+          "outbound": {"type": "vless", "server": "bond2.example.com", "server_port": 443, "uuid": "9b65b7e1-04c8-4717-8f45-2aa61fd25937"},
+          "download_ratio": 50, "upload_ratio": 50
+        }
+      ]
+    },
+    {
+      "type": "failover", "tag": "failover-test", "strategy": "sequential", "delay": "1s",
+      "outbounds": [
+        {"type": "vless", "tag": "failover-vless", "server": "failover.example.com", "server_port": 443, "uuid": "9b65b7e1-04c8-4717-8f45-2aa61fd25937"},
+        {"type": "trojan", "tag": "failover-trojan", "server": "failover2.example.com", "server_port": 443, "password": "example-password"}
+      ]
+    }
+  ],
+  "endpoints": [
+    {
+      "type": "warp", "tag": "warp-test", "system": false, "name": "warp0",
+      "profile": {"detour": "direct", "id": "example-id", "private_key": "example-private-key"}
+    },
+    {
+      "type": "vpn-client", "tag": "vpn-test", "address": "10.0.0.2", "key": "1c9b2ccf-b0c0-4c26-868d-a55a4edad3fe",
+      "outbound": {
+        "type": "vless", "tag": "vpn-vless-test", "server": "vpn.example.com", "server_port": 443,
+        "uuid": "9b65b7e1-04c8-4717-8f45-2aa61fd25937", "network": "tcp"
+      }
+    }
+  ],
+  "route": {"final": "direct", "default_domain_resolver": "default", "auto_detect_interface": true}
+}

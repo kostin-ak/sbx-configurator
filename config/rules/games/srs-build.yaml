@@ -1,0 +1,7 @@
+output: "custom-games"
+
+rules:
+  domain_suffix: 
+    - "domains.txt"
+  ip_cidr:
+    - "ip_cidr.txt"

@@ -1,0 +1,7 @@
+output: "custom-media"
+
+rules:
+  domain_suffix: 
+    - "domains.txt"
+  domain_keyword: 
+    - "keywords.txt"

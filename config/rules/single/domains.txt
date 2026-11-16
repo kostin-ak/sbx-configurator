@@ -1,0 +1,63 @@
+# Pornhub Network & Tubes
+pornhub.com
+*.pornhub.com
+redtube.com
+*.redtube.com
+youporn.com
+*.youporn.com
+tube8.com
+*.tube8.com
+
+# XVideos & XNXX
+xv-ru.com
+*.xv-ru.com
+xv-vid.com
+*.xv-vid.com
+xvideos.com
+*.xvideos.com
+xnxx.com
+*.xnxx.com
+
+# Other Major Tubes
+xhamster.com
+*.xhamster.com
+spankbang.com
+*.spankbang.com
+eporner.com
+*.eporner.com
+beeg.com
+*.beeg.com
+
+# Subscription Platforms
+onlyfans.com
+*.onlyfans.com
+fansly.com
+*.fansly.com
+
+# Webcam Services
+chaturbate.com
+*.chaturbate.com
+stripchat.com
+*.stripchat.com
+bongacams.com
+*.bongacams.com
+cam4.com
+*.cam4.com
+livejasmin.com
+*.livejasmin.com
+myfreecams.com
+*.myfreecams.com
+
+# Studios & Production
+brazzers.com
+*.brazzers.com
+realitykings.com
+*.realitykings.com
+naughtyamerica.com
+*.naughtyamerica.com
+bangbros.com
+*.bangbros.com
+
+motherless.com
+sefan.ru
+reddit.com

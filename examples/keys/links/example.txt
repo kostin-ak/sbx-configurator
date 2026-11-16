@@ -1,0 +1,2 @@
+# Hand-written share links, one per line. Lines starting with # are ignored.
+hysteria2://example-password@hy2.example.com:443/?obfs=salamander&obfs-password=example-obfs&sni=hy2.example.com#Example%20HY2

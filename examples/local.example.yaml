@@ -1,0 +1,9 @@
+# Copy to config/secrets/local.yaml and fill in your own values.
+subscriptions:
+  example:
+    url: https://example.com/subscription
+
+keys:
+  awg3: /data/sbx/keys/awg3
+  warp: /data/sbx/keys/warp
+  links: /data/sbx/keys/links

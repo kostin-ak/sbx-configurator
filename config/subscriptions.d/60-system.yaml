@@ -1,0 +1,18 @@
+apiVersion: sbx.shtorm/1
+kind: Subscription
+metadata:
+  name: System
+  enabled: true
+fetch:
+  cache:
+    enabled: false
+  file: /etc/sing-box/configs/system_nodes.txt
+transforms: []
+naming:
+  enabled: true
+selectors:
+  global: true
+  local:
+  - expand: all
+    type: selector
+    filter: ⛔ Block|🎯 Direct

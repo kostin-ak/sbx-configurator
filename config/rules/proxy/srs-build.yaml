@@ -1,0 +1,9 @@
+output: "custom-proxy"
+
+rules:
+  domain_suffix: 
+    - "domains.txt"
+  domain_keyword: 
+    - "keywords.txt"
+  ip_cidr:
+    - "ip_cidr.txt"

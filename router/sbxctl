@@ -1,0 +1,537 @@
+#!/bin/sh
+# sbxctl — staged control utility for the sing-box-extended pipeline.
+#
+# Every pipeline stage is a separate command, so a cron job or an operator can
+# run only the part that is needed:
+#   fetch    download subscription caches
+#   srs      compile SRS rule-sets
+#   build    rebuild build/artifacts/config.json (+ structural/binary checks)
+#   apply    build, check, restart and verify the service
+#   refresh  fetch + build --no-srs + apply (the cron path)
+
+set -eu
+
+ROOT="${SBX_ROOT:-/data/sbx/current}"
+DATA="${SBX_ROOT_DATA:-/data/sbx}"
+BIN="$ROOT/bin/sing-box-extended"
+CONFIG="$ROOT/build/artifacts/config.json"
+ARTIFACT_DIR="$DATA/build/artifacts"
+ARTIFACT_PREV="$ARTIFACT_DIR/config.json.prev"
+KEYS_DIR="$DATA/keys"
+KEYS_KINDS="awg3 warp links"
+PROTOCOL_CONFIG="$ROOT/config/protocol-check.json"
+PYTHON="${PYTHON:-python3}"
+INIT="/etc/init.d/sing-box-extended"
+MAIN_PID_FILE="$DATA/state/main/procd.pid"
+PROXY_PID_FILE="$DATA/state/proxy-only.pid"
+PROXY_LOG="$DATA/state/proxy-only-runtime.log"
+PROXY_CONFIG="$ROOT/build/proxy-only/config.json"
+LOCK_DIR="$DATA/state/sbxctl.lock"
+REFRESH_LOG="$DATA/state/main/refresh.log"
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+ok() { printf '\033[32mOK\033[0m %s\n' "$*"; }
+warn() { printf '\033[33mWARN\033[0m %s\n' "$*" >&2; }
+err() { printf '\033[31mERROR\033[0m %s\n' "$*" >&2; }
+
+need_root() {
+  [ "$(id -u)" = "0" ] || { err "run as root"; exit 1; }
+}
+
+need_binary() {
+  [ -x "$BIN" ] || { err "binary is absent: $BIN"; exit 1; }
+  export PYTHONPATH="$ROOT"
+}
+
+need_files() {
+  need_binary
+  [ -f "$CONFIG" ] || { err "artifact is absent: $CONFIG"; exit 1; }
+}
+
+lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo $$ > "$LOCK_DIR/pid"
+    trap 'rm -rf "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+    return
+  fi
+  other="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [ -n "$other" ] && kill -0 "$other" 2>/dev/null; then
+    err "another sbxctl run is active (pid $other)"
+    exit 1
+  fi
+  warn "removing stale lock (pid ${other:-unknown} is gone)"
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR"
+  echo $$ > "$LOCK_DIR/pid"
+  trap 'rm -rf "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM
+}
+
+config_root() {
+  # Releases before the layout cleanup keep sources under config/v2.
+  if [ -d "$ROOT/config/subscriptions.d" ]; then
+    echo "$ROOT/config"
+  elif [ -d "$ROOT/config/v2/subscriptions.d" ]; then
+    echo "$ROOT/config/v2"
+  else
+    echo "$ROOT/config"
+  fi
+}
+
+port_open() {
+  "$PYTHON" - "$1" <<'PY'
+import socket, sys
+sock = socket.socket()
+sock.settimeout(1)
+try:
+    sock.connect(("127.0.0.1", int(sys.argv[1])))
+except OSError:
+    raise SystemExit(1)
+finally:
+    sock.close()
+PY
+}
+
+wait_for() {
+  port="$1"
+  limit="${2:-30}"
+  waited=0
+  while [ "$waited" -lt "$limit" ]; do
+    if port_open "$port"; then
+      return 0
+    fi
+    waited=$((waited + 1))
+    sleep 1
+  done
+  return 1
+}
+
+service_healthy() {
+  if ! port_open 7890; then
+    return 1
+  fi
+  if ! port_open 9090; then
+    return 1
+  fi
+  if [ -f "$MAIN_PID_FILE" ]; then
+    pid="$(cat "$MAIN_PID_FILE" 2>/dev/null || true)"
+    [ -n "$pid" ] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+  fi
+  return 0
+}
+
+cmd_status() {
+  bold "SBX status"
+  if [ -L "$DATA/current" ]; then
+    echo "release: $(readlink "$DATA/current")"
+  else
+    echo "release: not linked"
+  fi
+  if [ -x "$INIT" ]; then
+    "$INIT" status || true
+  else
+    warn "init script is absent: $INIT"
+  fi
+  if [ -f "$MAIN_PID_FILE" ]; then
+    echo "procd pidfile: $(cat "$MAIN_PID_FILE" 2>/dev/null || echo invalid)"
+  fi
+  if ip link show tun0 >/dev/null 2>&1; then
+    ok "tun0 is up"
+  else
+    warn "tun0 is down"
+  fi
+  if port_open 7890 >/dev/null 2>&1; then ok "mixed proxy 127.0.0.1:7890"; else warn "mixed proxy :7890 is closed"; fi
+  if port_open 9090 >/dev/null 2>&1; then ok "Clash API 127.0.0.1:9090"; else warn "Clash API :9090 is closed"; fi
+  if [ -f "$CONFIG" ]; then
+    echo "artifact: $CONFIG"
+    sha256sum "$CONFIG" | awk '{print "artifact sha256:",$1}'
+    echo "artifact mtime: $(date -r "$CONFIG" 2>/dev/null || stat -c %y "$CONFIG" 2>/dev/null || echo unknown)"
+  fi
+  if [ -f "$REFRESH_LOG" ]; then
+    echo "last refresh: $(tail -n 1 "$REFRESH_LOG" 2>/dev/null || true)"
+  fi
+  df -h /data | tail -1
+}
+
+cmd_releases() {
+  bold "Releases"
+  for dir in "$DATA"/releases/*/; do
+    [ -d "$dir" ] || continue
+    name="$(basename "$dir")"
+    marker=" "
+    [ "$(readlink "$DATA/current" 2>/dev/null || true)" = "releases/$name" ] && marker="*"
+    echo " $marker $name"
+  done
+}
+
+cmd_fetch() {
+  need_root
+  need_binary
+  [ -f "$ROOT/config/secrets/local.yaml" ] || { err "secrets file is absent"; exit 1; }
+  backup="$DATA/state/subscriptions-backup-$(date +%Y%m%d-%H%M%S)"
+  if [ -d "$DATA/state/subscriptions" ]; then
+    mkdir -p "$backup"
+    cp -a "$DATA/state/subscriptions/." "$backup/"
+    echo "cache backup: $backup"
+  fi
+  "$PYTHON" "$ROOT/tools/refresh_subscriptions.py" \
+    --config-root "$(config_root)" \
+    --secrets "$ROOT/config/secrets/local.yaml" \
+    --cache-dir "$DATA/state/subscriptions" \
+    --allow-partial
+  ok "subscription caches refreshed"
+}
+
+cmd_srs() {
+  need_root
+  need_binary
+  "$PYTHON" -m sbx.cli --root "$ROOT" srs --binary "$BIN"
+  ok "SRS rule-sets compiled"
+}
+
+cmd_build() {
+  need_root
+  need_files
+  cd "$ROOT"
+  if [ -f "$CONFIG" ]; then
+    cp "$CONFIG" "$ARTIFACT_PREV"
+  fi
+  if [ "${1:-}" = "--no-srs" ]; then
+    "$PYTHON" -m sbx.cli --root "$ROOT" build --no-srs --check --binary "$BIN" --workdir "$DATA/state/local"
+  else
+    "$PYTHON" -m sbx.cli --root "$ROOT" build --check --binary "$BIN" --workdir "$DATA/state/local"
+  fi
+  "$BIN" check -c "$PROTOCOL_CONFIG" -D "$DATA/state/protocol-check"
+  ok "candidate built and checked"
+}
+
+cmd_sync() {
+  need_root
+  need_binary
+  for kind in $KEYS_KINDS; do
+    mkdir -p "$KEYS_DIR/$kind" "$DATA/inbox/$kind"
+    for file in "$DATA/inbox/$kind"/*; do
+      [ -f "$file" ] || continue
+      name="$(basename "$file")"
+      cp -f "$file" "$KEYS_DIR/$kind/$name"
+      chmod 600 "$KEYS_DIR/$kind/$name"
+      echo "synced: $kind/$name"
+    done
+    chmod 700 "$KEYS_DIR" "$KEYS_DIR/$kind" 2>/dev/null || true
+    if [ -d "$KEYS_DIR/$kind" ]; then
+      "$PYTHON" "$ROOT/tools/probe_folder.py" --folder "$KEYS_DIR/$kind" \
+        --binary "$BIN" --state "$DATA/state/probe" --parse-only || {
+          err "validation failed for $kind, artifact not rebuilt"
+          return 1
+        }
+    fi
+  done
+  cmd_build --no-srs
+  ok "keys synced and candidate rebuilt; service untouched"
+}
+
+cmd_probe() {
+  need_root
+  need_binary
+  selection="${1:-all}"
+  case "$selection" in
+    all) folders="$KEYS_DIR/awg3 $KEYS_DIR/warp $KEYS_DIR/links" ;;
+    awg3|warp|links) folders="$KEYS_DIR/$selection" ;;
+    /*) folders="$selection" ;;
+    *) err "unknown probe target: $selection"; exit 1 ;;
+  esac
+  for folder in $folders; do
+    [ -d "$folder" ] || continue
+    echo "=== probe $folder ==="
+    "$PYTHON" "$ROOT/tools/probe_folder.py" --folder "$folder" \
+      --binary "$BIN" --state "$DATA/state/probe" || true
+  done
+}
+
+cmd_check() {
+  need_root
+  need_files
+  "$PYTHON" -m sbx.cli check --config "$CONFIG" --binary "$BIN" --workdir "$DATA/state/local"
+  "$BIN" check -c "$PROTOCOL_CONFIG" -D "$DATA/state/protocol-check"
+  ok "artifact checks passed"
+}
+
+cmd_restart() {
+  need_root
+  [ -x "$INIT" ] || { err "init script is absent: $INIT"; exit 1; }
+  "$INIT" restart
+  if wait_for 7890 60 && wait_for 9090 60; then
+    ok "sing-box-extended restarted"
+  else
+    err "service did not become ready"
+    return 1
+  fi
+}
+
+cmd_apply() {
+  need_root
+  need_files
+  [ -x "$INIT" ] || { err "init script is absent: $INIT"; exit 1; }
+  if [ "${1:-}" != "--no-build" ]; then
+    cmd_build "${2:-}"
+  fi
+  if cmd_restart && service_healthy; then
+    ok "candidate activated"
+    cmd_status
+    return 0
+  fi
+  err "activation failed, restoring previous artifact"
+  if [ -f "$ARTIFACT_PREV" ]; then
+    cp "$ARTIFACT_PREV" "$CONFIG"
+    cmd_restart || true
+  fi
+  return 1
+}
+
+cmd_refresh() {
+  need_root
+  need_files
+  restart=1
+  for arg in "$@"; do
+    case "$arg" in
+      --no-restart) restart=0 ;;
+      *) err "unknown option: $arg"; exit 1 ;;
+    esac
+  done
+  cmd_fetch
+  cmd_build --no-srs
+  cmd_check
+  if [ "$restart" = "0" ]; then
+    ok "caches and artifact refreshed; service left running (reboot will pick it up)"
+    return 0
+  fi
+  cmd_apply --no-build
+}
+
+cmd_deploy_artifact() {
+  need_root
+  need_binary
+  source_file="${1:-$DATA/inbox/config.json}"
+  restart="${2:-}"
+  [ -f "$source_file" ] || { err "artifact is absent: $source_file"; exit 1; }
+  "$BIN" check -c "$source_file" -D "$DATA/state/deploy-check" || {
+    err "artifact failed sing-box check"
+    exit 1
+  }
+  mkdir -p "$ARTIFACT_DIR"
+  if [ -f "$CONFIG" ]; then
+    cp "$CONFIG" "$ARTIFACT_PREV"
+  fi
+  cp "$source_file" "$CONFIG"
+  ok "artifact installed: $CONFIG"
+  if [ "$restart" = "--restart" ]; then
+    cmd_apply --no-build
+  else
+    echo "service untouched; run 'sbxctl apply --no-build' to activate"
+  fi
+}
+
+cmd_start() {
+  need_root
+  [ -x "$INIT" ] || { err "init script is absent: $INIT"; exit 1; }
+  "$INIT" start
+  wait_for 7890 60 || { err "mixed proxy did not become ready"; exit 1; }
+  wait_for 9090 60 || { err "Clash API did not become ready"; exit 1; }
+  ok "sing-box-extended started"
+}
+
+cmd_stop() {
+  need_root
+  [ -x "$INIT" ] || { err "init script is absent: $INIT"; exit 1; }
+  "$INIT" stop
+  ok "sing-box-extended stopped"
+}
+
+cmd_rollback() {
+  need_root
+  target="${1:-}"
+  if [ -z "$target" ]; then
+    target="$("$PYTHON" - "$DATA" <<'PY'
+import sys
+from pathlib import Path
+data = Path(sys.argv[1])
+releases = sorted(p.name for p in (data / "releases").iterdir() if p.is_dir())
+current = (data / "current").resolve().name
+if current not in releases or releases.index(current) == 0:
+    raise SystemExit("no previous release to roll back to")
+print(releases[releases.index(current) - 1])
+PY
+)"
+  fi
+  [ -d "$DATA/releases/$target" ] || { err "release not found: $target"; exit 1; }
+  "$PYTHON" - "$DATA" "$target" <<'PY'
+import os
+import sys
+from pathlib import Path
+data = Path(sys.argv[1])
+target = sys.argv[2]
+next_link = data / "current.next"
+if next_link.exists() or next_link.is_symlink():
+    next_link.unlink()
+os.symlink("releases/" + target, next_link)
+os.replace(next_link, data / "current")
+print("switched current -> releases/" + target)
+PY
+  cmd_restart
+  ok "rolled back to $target"
+}
+
+cmd_logs() {
+  lines="${1:-100}"
+  log="$DATA/state/local/logs/sing-box.log"
+  [ -f "$log" ] || log="$PROXY_LOG"
+  tail -n "$lines" "$log"
+}
+
+cmd_backup() {
+  need_root
+  backup_dir="/data/backup/sbx-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$backup_dir"
+  tar -czf "$backup_dir/sbx-runtime.tar.gz" \
+    -C / \
+    data/sbx/current/config \
+    data/sbx/current/snapshot/etc/sing-box/config.parts \
+    data/sbx/state/subscriptions \
+    data/sbx/state/rules \
+    data/sbx/state/local/logs/sing-box.log 2>/dev/null || true
+  cp -a "$CONFIG" "$backup_dir/config.json" 2>/dev/null || true
+  sha256sum "$backup_dir"/* > "$backup_dir/checksums.sha256"
+  ok "backup created: $backup_dir"
+}
+
+cmd_proxy_build() {
+  need_root
+  need_files
+  mkdir -p "$ROOT/build/proxy-only" "$DATA/state"
+  "$PYTHON" -m sbx.cli --root "$ROOT" proxy-only \
+    --config "$CONFIG" \
+    --output "$PROXY_CONFIG" \
+    --listen 127.0.0.1 --port 7891 --clash-port 9091 \
+    --offline-rule-sets \
+    --compiler "$BIN" \
+    --stub-dir "$DATA/state/rule-set-stubs"
+  "$BIN" check -c "$PROXY_CONFIG" -D "$DATA/state/proxy-only"
+  ok "proxy-only configuration built"
+}
+
+cmd_proxy_start() {
+  need_root
+  [ -f "$PROXY_CONFIG" ] || cmd_proxy_build
+  if [ -f "$PROXY_PID_FILE" ] && kill -0 "$(cat "$PROXY_PID_FILE" 2>/dev/null)" 2>/dev/null; then
+    err "proxy-only instance is already running"
+    exit 1
+  fi
+  : > "$PROXY_LOG"
+  setsid "$BIN" run -c "$PROXY_CONFIG" -D "$DATA/state/proxy-only" \
+    >>"$PROXY_LOG" 2>&1 </dev/null &
+  pid=$!
+  echo "$pid" > "$PROXY_PID_FILE"
+  if wait_for 7891 30 && wait_for 9091 30; then
+    ok "proxy-only started, PID $pid, ports 7891/9091"
+  else
+    err "proxy-only did not become ready; see $PROXY_LOG"
+    kill "$pid" 2>/dev/null || true
+    rm -f "$PROXY_PID_FILE"
+    exit 1
+  fi
+}
+
+cmd_proxy_stop() {
+  need_root
+  if [ -f "$PROXY_PID_FILE" ]; then
+    pid="$(cat "$PROXY_PID_FILE" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid"
+      sleep 1
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+      ok "proxy-only stopped, PID $pid"
+    fi
+    rm -f "$PROXY_PID_FILE"
+  else
+    warn "proxy-only is not running"
+  fi
+}
+
+cmd_help() {
+  cat <<'EOF'
+Usage: sbxctl COMMAND [options]
+
+Pipeline stages (run any part independently):
+  status           show service, ports, TUN, artifact and last refresh
+  fetch            download subscription caches only (with a timestamped backup)
+  sync             copy inbox/{awg3,warp,links} to keys/, validate and rebuild
+  probe [awg3|warp|links|all]
+                   run isolated connectivity probes for folder nodes
+  srs              compile SRS rule-sets only, no artifact and no restart
+  build [--no-srs] rebuild build/artifacts/config.json and run all checks
+  check            structural, sing-box and protocol checks on the artifact
+  apply [--no-build] [--no-srs]
+                   build (optional), check, restart and verify the service
+  deploy-artifact [FILE] [--restart]
+                   install a config built elsewhere (no build on the router)
+  refresh [--no-restart]
+                   fetch + build --no-srs + check + restart (cron entry point)
+  restart          restart main TUN service
+  start | stop     start / stop main TUN service
+  releases         list staged releases
+  rollback [VER]   switch current to a previous release and restart
+  logs [N]         show recent logs
+  backup           create a local sing-box/pipeline backup
+
+Isolated proxy-only runtime:
+  proxy-build      create offline proxy-only config
+  proxy-start      start isolated instance on ports 7891/9091
+  proxy-stop       stop isolated instance
+  proxy-status     show isolated instance PID and ports
+
+Examples:
+  sbxctl srs                       # только правила SRS
+  sbxctl fetch                     # только подписки в кэш
+  sbxctl sync                      # закинуть новые ключи и пересобрать без restart
+  sbxctl probe awg3                # проверить узлы из /data/sbx/keys/awg3
+  sbxctl apply                     # полный цикл: сборка + перезапуск
+  sbxctl deploy-artifact /data/sbx/inbox/config.json --restart
+  sbxctl refresh --no-restart      # обновить кэш и артефакт без перезапуска
+  sbxctl rollback                  # откат на предыдущий релиз
+EOF
+}
+
+case "${1:-help}" in
+  status) cmd_status ;;
+  releases) cmd_releases ;;
+  fetch) lock; cmd_fetch ;;
+  sync) lock; cmd_sync ;;
+  probe) lock; shift; cmd_probe "${1:-all}" ;;
+  srs) lock; cmd_srs ;;
+  build) lock; shift; cmd_build "${1:-}" ;;
+  check) lock; cmd_check ;;
+  apply) lock; shift; cmd_apply "${1:-}" "${2:-}" ;;
+  deploy-artifact) lock; shift; cmd_deploy_artifact "${1:-}" "${2:-}" ;;
+  refresh) lock; shift; cmd_refresh "$@" ;;
+  start) lock; cmd_start ;;
+  stop) lock; cmd_stop ;;
+  restart) lock; cmd_restart ;;
+  rollback) lock; shift; cmd_rollback "${1:-}" ;;
+  proxy-build) lock; cmd_proxy_build ;;
+  proxy-start) lock; cmd_proxy_start ;;
+  proxy-stop) lock; cmd_proxy_stop ;;
+  proxy-status)
+    if [ -f "$PROXY_PID_FILE" ]; then
+      pid="$(cat "$PROXY_PID_FILE")"
+      kill -0 "$pid" 2>/dev/null && ok "proxy-only PID $pid" || warn "stale PID $pid"
+    else
+      warn "proxy-only is not running"
+    fi
+    port_open 7891 >/dev/null 2>&1 && ok "proxy port 7891 open" || warn "proxy port 7891 closed"
+    port_open 9091 >/dev/null 2>&1 && ok "API port 9091 open" || warn "API port 9091 closed"
+    ;;
+  logs) shift; cmd_logs "${1:-100}" ;;
+  backup) lock; cmd_backup ;;
+  help|--help|-h) cmd_help ;;
+  *) err "unknown command: $1"; cmd_help; exit 1 ;;
+esac

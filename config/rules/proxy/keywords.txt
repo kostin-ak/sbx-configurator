@@ -1,0 +1,4 @@
+jetbrains
+workshop
+purpur
+curseforge

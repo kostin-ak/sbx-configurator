@@ -1,0 +1,17 @@
+settings:
+  config_root: config
+  secrets: config/secrets/local.yaml
+  build_dir: build
+  cache_dir: state/subscriptions
+  static_parts: snapshot/etc/sing-box/config.parts
+  exclude_static_parts:
+    - 30-auto-generated
+  migrate_1_14: true
+  snapshot_runtime_root: snapshot
+  state_runtime_root: state/local
+  force_cache: true
+  compile_srs: true
+  srs_input: config/rules
+  srs_output: state/rules
+  singbox_binary: bin/sing-box-extended
+  protocol_registry: protocols/registry.yaml

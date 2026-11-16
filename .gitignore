@@ -1,0 +1,36 @@
+# Local router snapshots contain subscription credentials and node secrets.
+snapshot/
+.snapshot/
+
+# Generated configuration, downloaded binaries and runtime state.
+artifacts/
+backups/
+build/
+state/
+inbox/
+bin/
+*.log
+*.prev
+
+# Local secrets and machine-specific configuration.
+secrets/
+keys/
+config/local*.yaml
+config/local*.yml
+.env
+
+# Public examples must stay tracked even though their folder names look private.
+!examples/keys/
+!examples/keys/**
+
+# Python tooling.
+__pycache__/
+*.py[cod]
+.venv/
+.venv*/
+.pytest_cache/
+*.egg-info/
+
+# OS noise.
+.DS_Store
+Thumbs.db

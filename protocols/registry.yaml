@@ -1,0 +1,27 @@
+version: 1
+protocols:
+  direct: {section: outbounds}
+  block: {section: outbounds}
+  selector: {section: outbounds, required: [outbounds]}
+  urltest: {section: outbounds, required: [outbounds]}
+  vless: {section: outbounds, required: [server, server_port, uuid]}
+  trojan: {section: outbounds, required: [server, server_port, password]}
+  vmess: {section: outbounds, required: [server, server_port, uuid]}
+  shadowsocks: {section: outbounds, required: [server, server_port, method, password]}
+  hysteria: {section: outbounds, required: [server, server_port]}
+  hysteria2: {section: outbounds, required: [server, server_port]}
+  tuic: {section: outbounds, required: [server, server_port, uuid, password]}
+  anytls: {section: outbounds, required: [server, server_port, password]}
+  mieru: {section: outbounds, required: [server, server_port, username, password]}
+  trusttunnel: {section: outbounds, required: [server, server_port, username, password]}
+  sudoku: {section: outbounds, required: [server, server_port, key]}
+  ssh: {section: outbounds, required: [server, server_port, user]}
+  call: {section: outbounds, required: [join_link]}
+  masque: {section: outbounds}
+  bond: {section: outbounds, required: [outbounds]}
+  fallback: {section: outbounds, required: [outbounds]}
+  failover: {section: outbounds, required: [outbounds]}
+  parser: {section: outbounds, required: [link]}
+  wireguard: {section: endpoints, required: [address, private_key]}
+  warp: {section: endpoints}
+  vpn-client: {section: endpoints, required: [address, key, outbound]}

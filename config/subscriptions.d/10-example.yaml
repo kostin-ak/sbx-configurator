@@ -1,0 +1,18 @@
+apiVersion: sbx.shtorm/1
+kind: Subscription
+metadata:
+  name: Example
+  enabled: true
+fetch:
+  cache:
+    enabled: false
+  file: /etc/sing-box/configs/example_links.txt
+transforms:
+- action: rename
+  pattern: ([🇦-🇿]{2})
+  replacement: '\1 [EX] '
+naming:
+  enabled: true
+selectors:
+  global: true
+  local: []

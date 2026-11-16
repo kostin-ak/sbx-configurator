@@ -1,0 +1,14 @@
+apiVersion: sbx.shtorm/1
+kind: Protocol
+metadata:
+  name: warp-example
+  enabled: false
+protocol:
+  type: warp
+  section: endpoints
+  tag: WARP example
+tunnel:
+  system: false
+  name: warp0
+profile:
+  detour: direct

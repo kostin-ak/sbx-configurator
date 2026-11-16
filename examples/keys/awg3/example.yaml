@@ -1,0 +1,4 @@
+# Optional sidecar: overrides the node tag and adds a country flag.
+tag: example
+country: DE
+provider: AWG

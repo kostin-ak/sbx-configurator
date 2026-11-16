@@ -1,0 +1,18 @@
+apiVersion: sbx.shtorm/1
+kind: Protocol
+metadata:
+  name: mieru-example
+  enabled: false
+protocol:
+  type: mieru
+  section: outbounds
+  tag: Mieru example
+connection:
+  server: mieru.example.com
+  server_port: 27017
+  transport: TCP
+credentials:
+  username: example-user
+  password: replace-me
+options:
+  multiplexing: MULTIPLEXING_LOW

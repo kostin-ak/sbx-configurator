@@ -1,0 +1,28 @@
+apiVersion: sbx.shtorm/1
+kind: Policies
+defaults:
+  final: proxy
+  catch_all: proxy
+settings:
+  auto_detect_interface: true
+  default_domain_resolver: dns-local
+policies:
+- alias: Laptop
+  categories:
+  - youtube
+  - runet
+  - ai
+  - communication
+  - proxy
+- alias: Personal
+  categories:
+  - single
+- alias: Tablets
+  categories:
+  - proxy
+- alias: Direct
+  categories:
+  - direct
+- alias: Tablet
+  categories:
+  - youtube
