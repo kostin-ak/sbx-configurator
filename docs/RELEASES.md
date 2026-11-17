@@ -3,8 +3,8 @@
 ## Source pack
 
 ```bash
-.venv/bin/python tools/make_release.py --version 0.2.0
-.venv/bin/python tools/audit_release.py artifacts/sbx-0.2.0.sbxpack
+.venv/bin/python tools/make_release.py --version 0.3.0
+.venv/bin/python tools/audit_release.py artifacts/sbx-0.3.0.sbxpack
 ```
 
 The builder:

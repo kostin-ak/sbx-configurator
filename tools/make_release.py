@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from sbx.pack import create_pack, extract_pack, verify_pack
 
 
-COPY_DIRECTORIES = ("sbx", "tools", "tests", "config", "protocols", "docs")
+COPY_DIRECTORIES = ("sbx", "tools", "tests", "config", "protocols", "docs", "examples")
 COPY_FILES = ("README.md", "pyproject.toml", "sbxctl", ".gitattributes", "LICENSE", "SECURITY.md")
 
 
