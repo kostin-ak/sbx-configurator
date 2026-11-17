@@ -19,6 +19,11 @@ config/local*.yaml
 config/local*.yml
 .env
 
+# User profiles, exported bundles and incoming imports.
+profiles/
+exports/
+imports/
+
 # Public examples must stay tracked even though their folder names look private.
 !examples/snapshot/
 !examples/snapshot/**

@@ -18,6 +18,8 @@ try:
     from sbx.tui import routing as routing_helpers
     from sbx.tui import transforms as transform_helpers
     from sbx.tui import rules as rule_helpers
+    from sbx.tui import batch as batch_helpers
+    from sbx.tui import bundles as bundle_helpers
     from sbx.tui import services
 except Exception:  # noqa: BLE001
     HAS_TUI = False
@@ -28,6 +30,8 @@ except Exception:  # noqa: BLE001
     routing_helpers = None
     transform_helpers = None
     rule_helpers = None
+    batch_helpers = None
+    bundle_helpers = None
     services = None
 
 TUI_REQUIRED = unittest.skipUnless(HAS_TUI, "TUI dependencies are not installed (pip install .[tui])")
@@ -280,7 +284,7 @@ class AppSmokeTests(unittest.IsolatedAsyncioTestCase):
         from textual.widgets import DataTable, TabbedContent, TextArea
 
         from sbx.tui.app import SbxTui
-        from sbx.tui.screens import SubscriptionModal, VisualPane
+        from sbx.tui.screens import BatchModal, ProfileExportModal, ProfileImportModal, SubscriptionModal, VisualPane
 
         app = SbxTui("default", ROOT)
         async with app.run_test() as pilot:
@@ -298,10 +302,11 @@ class AppSmokeTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertGreater(app.query_one("#visual-table", DataTable).row_count, 0)
 
-            app.push_screen(SubscriptionModal(app.store))
-            await pilot.pause()
-            await pilot.press("escape")
-            await pilot.pause()
+            for modal in (SubscriptionModal(app.store), BatchModal(app.store), ProfileExportModal(), ProfileImportModal(app.root)):
+                app.push_screen(modal)
+                await pilot.pause()
+                await pilot.press("escape")
+                await pilot.pause()
             self.assertEqual(app.query_one(TabbedContent).active, "yaml")
 
     async def test_profile_switch(self):

@@ -27,10 +27,12 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from . import routing as routing_helpers
 from . import rules as rule_helpers
+from . import bundles as bundle_helpers
 from . import transforms as transform_helpers
 from . import yamltree
 from .profiles import list_profiles
 from .services import SBXCTL_ACTIONS, SourcePreview, artifact_info, list_imports, read_logs
+from . import batch as batch_helpers
 from .store import ConfigStore, Document, coerce, mask
 
 
@@ -792,6 +794,144 @@ class KeyValueModal(ModalScreen[tuple]):
         self.dismiss(None)
 
 
+class CloneModal(ModalScreen[str]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, source: str, suggestion: str) -> None:
+        super().__init__()
+        self.source = source
+        self.suggestion = suggestion
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="modal"):
+            yield Static(f"Clone {self.source}", classes="modal-title")
+            yield Label("New name")
+            yield Input(value=self.suggestion, id="name")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Clone", id="clone", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "clone":
+            self.dismiss(None)
+            return
+        name = self.query_one("#name", Input).value.strip()
+        if not name:
+            self.app.notify("name is required", severity="error")
+            return
+        self.dismiss(name)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class BatchModal(ModalScreen[tuple]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__()
+        self.store = store
+        self.names = [
+            str((document.data.get("metadata") or {}).get("name"))
+            for document in store.subscriptions()
+            if (document.data.get("metadata") or {}).get("name")
+        ]
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="modal wide"):
+            yield Static("Batch operations", classes="modal-title")
+            with VerticalScroll(classes="modal-body"):
+                for index, name in enumerate(self.names):
+                    with Horizontal():
+                        yield Switch(value=False, id=f"batch-{index}")
+                        yield Label(name)
+            yield Select(
+                [("Enable", "enable"), ("Disable", "disable"), ("Archive", "archive")],
+                value="enable",
+                id="batch-action",
+            )
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Apply", id="apply", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "apply":
+            self.dismiss(None)
+            return
+        selected = [
+            name
+            for index, name in enumerate(self.names)
+            if self.query_one(f"#batch-{index}", Switch).value
+        ]
+        action = str(self.query_one("#batch-action", Select).value)
+        self.dismiss((action, selected))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ProfileExportModal(ModalScreen[bool | None]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="modal"):
+            yield Static("Export profile", classes="modal-title")
+            yield Label("Include config/secrets/local.yaml")
+            yield Switch(value=False, id="include-secrets")
+            yield Static("The bundle is written to ./exports/", classes="hint")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("Export", id="export", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "export":
+            self.dismiss(None)
+            return
+        self.dismiss(bool(self.query_one("#include-secrets", Switch).value))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ProfileImportModal(ModalScreen[tuple]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, root) -> None:
+        super().__init__()
+        self.root = root
+        self.files = bundle_helpers.list_bundles(root)
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="modal wide"):
+            yield Static("Import profile", classes="modal-title")
+            if not self.files:
+                yield Static(f"Put a bundle into {self.root / 'imports'}", classes="hint")
+            else:
+                yield Label("Bundle")
+                yield Select([(path.name, str(path)) for path in self.files], id="bundle")
+                yield Label("Profile name")
+                yield Input(id="profile-name")
+            with Horizontal(classes="modal-buttons"):
+                yield Button("Cancel", id="cancel")
+                if self.files:
+                    yield Button("Import", id="import", variant="primary")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id != "import":
+            self.dismiss(None)
+            return
+        value = self.query_one("#bundle", Select).value
+        if value in (None, Select.BLANK):
+            self.dismiss(None)
+            return
+        path = Path(str(value))
+        name = self.query_one("#profile-name", Input).value.strip() or path.name.replace(".tar.gz", "")
+        self.dismiss((name, str(path)))
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
 # ---------------------------------------------------------------------------- panes
 
 
@@ -800,6 +940,8 @@ class DashboardPane(Vertical):
         with Horizontal(classes="actions"):
             yield Select([], id="profile-select", prompt="Profile")
             yield Button("Lint", id="dashboard-lint")
+            yield Button("Export profile", id="dashboard-export-profile")
+            yield Button("Import profile", id="dashboard-import-profile")
         yield Static("", id="dashboard-summary")
         with Horizontal(classes="actions"):
             yield Button("Build", id="build", variant="primary")
@@ -853,6 +995,10 @@ class DashboardPane(Vertical):
             self.app.action_build()
         elif event.button.id == "dashboard-lint":
             self.app.action_lint()
+        elif event.button.id == "dashboard-export-profile":
+            self.app.push_screen(ProfileExportModal(), self.app.export_profile)
+        elif event.button.id == "dashboard-import-profile":
+            self.app.push_screen(ProfileImportModal(self.app.root), self.app.import_profile)
         elif event.button.id == "deploy":
             self.app.action_open_tab("deploy")
         elif event.button.id == "reload":
@@ -873,6 +1019,8 @@ class SourcesPane(Vertical):
             yield Button("Names", id="source-names")
             yield Button("Export", id="source-export")
             yield Button("Import", id="source-import")
+            yield Button("Clone", id="source-clone")
+            yield Button("Batch…", id="source-batch")
             yield Button("All on", id="source-all-on")
             yield Button("All off", id="source-all-off")
 
@@ -945,10 +1093,20 @@ class SourcesPane(Vertical):
             self.app.export_source(str(document.data.get("metadata", {}).get("name", "")))
         elif identifier == "source-import":
             self.app.push_screen(ImportModal(self.app.store), self._imported)
+        elif identifier == "source-clone":
+            name = str(document.data.get("metadata", {}).get("name", ""))
+            self.app.push_screen(CloneModal(name, f"{name} copy"), lambda new: self.app.clone_source(name, new))
+        elif identifier == "source-batch":
+            self.app.push_screen(BatchModal(self.app.store), self._batch)
 
     def _imported(self, path: str | None) -> None:
         if path:
             self.app.import_source(path)
+
+    def _batch(self, result: tuple | None) -> None:
+        if result:
+            action, names = result
+            self.app.batch_sources(str(action), names)
 
     def _delete(self, confirmed: bool | None) -> None:
         if not confirmed:

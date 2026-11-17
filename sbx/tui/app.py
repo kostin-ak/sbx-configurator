@@ -11,6 +11,8 @@ from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, TabbedContent, TabPane
 
 from . import services
+from . import batch as batch_helpers
+from . import bundles as bundle_helpers
 from ..lint import has_errors, lint_config as run_lint, summarize
 from .profiles import get_profile, list_profiles, project_root
 from .screens import (
@@ -412,6 +414,59 @@ class SbxTui(App):
             return
         self.reload_config()
         self.notify(f"imported {target.name}")
+
+
+    def clone_source(self, name: str, new_name: str | None) -> None:
+        if not new_name:
+            return
+        try:
+            target = batch_helpers.clone_subscription(self.store, name, new_name)
+        except Exception as error:  # noqa: BLE001
+            self.notify(str(error), severity="error", timeout=10)
+            return
+        self.reload_config()
+        self.notify(f"cloned to {target.name}")
+
+    def batch_sources(self, action: str, names: list[str]) -> None:
+        if not names:
+            self.notify("nothing selected", severity="warning")
+            return
+        if action == "archive":
+            updated, errors = batch_helpers.archive_many(self.store, names)
+            verb = "archived"
+        else:
+            updated, errors = batch_helpers.set_enabled(self.store, names, action == "enable")
+            verb = "enabled" if action == "enable" else "disabled"
+        self.reload_config()
+        if errors:
+            self.notify("; ".join(errors)[:180], severity="error", timeout=10)
+        else:
+            self.notify(f"{updated} subscription(s) {verb}")
+
+    def export_profile(self, include_secrets: bool | None) -> None:
+        if include_secrets is None:
+            return
+        try:
+            target = bundle_helpers.export_bundle(self.profile, include_secrets)
+        except Exception as error:  # noqa: BLE001
+            self.notify(str(error), severity="error", timeout=10)
+            return
+        self.notify(f"exported {target.name}")
+
+    def import_profile(self, result: tuple | None) -> None:
+        if not result:
+            return
+        name, path = result
+        try:
+            profile = bundle_helpers.import_bundle(self.root, Path(str(path)), str(name))
+        except Exception as error:  # noqa: BLE001
+            self.notify(str(error), severity="error", timeout=10)
+            return
+        try:
+            self.query_one(DashboardPane).refresh_profile_select()
+        except Exception:
+            pass
+        self.notify(f"imported profile {profile.name}")
 
 
 def run(argv: list[str] | None = None) -> int:

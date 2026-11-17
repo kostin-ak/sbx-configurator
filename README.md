@@ -158,9 +158,10 @@ Linux/macOS/WSL use `./run-tui.sh`.
 Dashboard with a profile switcher and lint, sources with node preview and
 transforms, routing forms, selectors, protocols, secrets, a raw YAML editor for
 every file with YAML highlighting and "open in vim", a visual path/type/value
-editor for the same files, build with log and diff, logs/probe, and artifact
-deploy over SSH. Comments survive edits, every save is validated and rolled back
-on error, and the service is never restarted automatically.
+editor for the same files, batch operations and profile bundles, build with log
+and diff, logs/probe, and artifact deploy over SSH. Comments survive edits, every
+save is validated and rolled back on error, and the service is never restarted
+automatically.
 See [docs/TUI.md](docs/TUI.md).
 
 ## Router deployment

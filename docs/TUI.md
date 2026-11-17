@@ -57,8 +57,8 @@ sbx-tui --list-profiles      # default + every profiles/<name>
 
 | Tab | What it does |
 |---|---|
-| **Dashboard** | profile switcher, artifact hash/size, subscription counts, Lint, Build/Deploy/Reload |
-| **Sources** | add/edit/toggle/archive subscriptions, enable/disable all, fetch a URL into the cache, preview parsed nodes and types, edit transforms, preview resulting names, export/import a subscription |
+| **Dashboard** | profile switcher, profile export/import, artifact hash/size, subscription counts, Lint, Build/Deploy/Reload |
+| **Sources** | add/edit/toggle/archive subscriptions, clone, batch operations, enable/disable all, fetch a URL into the cache, preview parsed nodes and types, edit transforms, preview resulting names, export/import a subscription |
 | **Routing** | devices, groups and policies with add/edit/delete forms and category hints |
 | **Rules** | categories (name, display, YAML rules, `disable_default`) and rule-sets (tag, type, format, URL, detour) |
 | **Selectors** | add/edit/delete selector templates (`tag`, `type`, `filter`, `prefer`) |
@@ -122,6 +122,32 @@ loading. The Visual tab works for *every* file, including ones without a
 dedicated form; subscriptions, routing, rules, selectors, protocols and secrets
 have specialised forms in their own tabs.
 
+## Batch operations
+
+**Batch…** on the Sources tab opens a multi-select list and applies one action
+to every ticked subscription: enable, disable or archive. The operation reports
+the number of updated entries and any per-source errors; saving still validates
+the whole profile after each file.
+
+**Clone** duplicates a subscription with its transforms and naming settings
+under a new name and the next free numeric prefix, which is handy for keeping a
+known-good copy before experimenting.
+
+## Profile bundles
+
+The Dashboard can export the whole profile to `exports/<profile>-<stamp>.tar.gz`
+and import a bundle from `imports/*.tar.gz` as a new profile under
+`profiles/<name>`.
+
+- **Export** excludes `config/secrets/local.yaml` unless *Include secrets* is
+  enabled; `.bak`, `.trash` and caches are always skipped.
+- The bundle contains a `manifest.json` with the profile name, timestamp and the
+  file list.
+- **Import** rejects absolute paths and `..` members, requires
+  `config/pipeline.yaml`, validates the extracted tree with `load_config` and
+  removes it again if validation fails.
+- Imported profiles appear in the Dashboard profile switcher immediately.
+
 ## Build and deploy
 
 - Build runs in a subprocess with the same arguments as
@@ -155,5 +181,5 @@ device. The TUI runs on a workstation and talks to the router over SSH.
 
 ## Roadmap
 
-- batch operations across subscriptions (clone definitions, apply a template);
-- profile import/export as a bundle.
+- apply a transform/naming template to many sources at once;
+- editing rule-set references directly from the category form.
